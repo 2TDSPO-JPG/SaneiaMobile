@@ -1,0 +1,78 @@
+import { Feather } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
+import { useState } from 'react';
+import { StyleSheet, Text, View } from 'react-native';
+import { api, demoMode, demoSession } from '../services/api';
+import { useSession } from '../session';
+import { colors } from '../theme';
+import { Body, Button, Card, Field, Heading, Notice, Screen, styles } from '../ui';
+
+function AuthForm({ signup }) {
+  const router = useRouter();
+  const { setSession } = useSession();
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  async function submit() {
+    setError('');
+    if ((signup && name.trim().length < 2) || !/^\S+@\S+\.\S+$/.test(email.trim()) || password.length < 8) {
+      setError('Confira os campos. Informe um e-mail válido e uma senha com ao menos 8 caracteres.');
+      return;
+    }
+    setBusy(true);
+    try {
+      const input = { email: email.trim().toLowerCase(), password };
+      const result = signup ? await api.signup({ ...input, name: name.trim() }) : await api.login(input);
+      if (!result.token || !['resident', 'operator'].includes(result.user?.role)) {
+        throw new Error('A API retornou uma sessão inválida.');
+      }
+      setSession(result);
+    } catch (failure) {
+      setError(failure.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Screen back={signup}>
+      {!signup && <View style={auth.hero}>
+        <View style={auth.heroIcon}><Feather name="map-pin" size={24} color={colors.mint} /></View>
+        <Text style={auth.heroTitle}>Saneamento perto de quem precisa.</Text>
+        <Text style={auth.heroText}>Registre ocorrências ou acompanhe alertas de reservatórios na sua região.</Text>
+      </View>}
+      <Heading kicker={signup ? 'Perfil de morador' : 'Acesso ao Saneia'}
+        title={signup ? 'Crie sua conta' : 'Entre na sua conta'}
+        subtitle={signup ? 'Acompanhe seus protocolos em um só lugar.' : undefined} />
+      <Card>
+        {signup && <Field label="Nome" value={name} onChangeText={setName} autoComplete="name" />}
+        <Field label="E-mail" value={email} onChangeText={setEmail} autoCapitalize="none"
+          keyboardType="email-address" autoComplete="email" placeholder="nome@exemplo.com" />
+        <Field label="Senha" value={password} onChangeText={setPassword} secureTextEntry
+          autoComplete={signup ? 'new-password' : 'current-password'} placeholder="Mínimo de 8 caracteres" />
+        <Notice error text={error} />
+        <Button title={signup ? 'Criar conta' : 'Entrar'} icon="log-in" busy={busy} onPress={submit} />
+        {!signup && !demoMode && <Button secondary title="Criar conta de morador" onPress={() => router.push('/cadastro')} />}
+      </Card>
+      {demoMode && !signup && <Card>
+        <Text style={styles.section}>Explore a demonstração</Text>
+        <Body>Entre com uma conta de teste do README ou explore um dos perfis com dados fictícios.</Body>
+        <Button secondary title="Explorar como morador" icon="user" onPress={() => setSession(demoSession('resident'))} />
+        <Button secondary title="Explorar como operadora" icon="activity" onPress={() => setSession(demoSession('operator'))} />
+      </Card>}
+    </Screen>
+  );
+}
+
+export const LoginScreen = () => <AuthForm signup={false} />;
+export const SignupScreen = () => <AuthForm signup />;
+
+const auth = StyleSheet.create({
+  hero: { backgroundColor: colors.ink, padding: 21, borderRadius: 22, gap: 10 },
+  heroIcon: { backgroundColor: '#224651', width: 43, height: 43, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  heroTitle: { color: colors.surface, fontWeight: '800', fontSize: 27, lineHeight: 32, maxWidth: 360 },
+  heroText: { color: '#CDE8E0', fontSize: 15, lineHeight: 21 },
+});
