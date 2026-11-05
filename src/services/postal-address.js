@@ -6,24 +6,43 @@ function readCep(value) {
   return text.replace('-', '');
 }
 
-export async function lookupCep(value) {
-  const cep = readCep(value);
+async function fetchPostalJson(url) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 8000);
-  let result;
+  const timeout = setTimeout(() => controller.abort(), 5000);
   try {
-    const response = await fetch(`https://viacep.com.br/ws/${cep}/json/`, { signal: controller.signal });
-    if (!response.ok) throw new Error();
-    result = await response.json();
-    if (!result || typeof result !== 'object') throw new Error();
+    const response = await fetch(url, { signal: controller.signal });
+    if (!response.ok) return null;
+    const result = await response.json();
+    return result && typeof result === 'object' ? result : null;
   } catch {
-    throw new Error('A busca por CEP está indisponível. Você pode preencher o endereço manualmente.');
+    return null;
   } finally {
     clearTimeout(timeout);
   }
+}
+
+function postalCoordinate(point) {
+  const read = (value) => typeof value === 'number' || (typeof value === 'string' && value.trim())
+    ? Number(value) : NaN;
+  const latitude = read(point?.latitude);
+  const longitude = read(point?.longitude);
+  return Math.abs(latitude) <= 90 && Math.abs(longitude) <= 180 && (latitude !== 0 || longitude !== 0)
+    ? { latitude, longitude } : null;
+}
+
+export async function lookupCep(value) {
+  const digits = readCep(value);
+  const cep = `${digits.slice(0, 5)}-${digits.slice(5)}`;
+  const primary = await fetchPostalJson(`https://brasilapi.com.br/api/cep/v2/${digits}`);
+  if (primary?.cep === digits) {
+    return { cep, street: primary.street || '', neighborhood: primary.neighborhood || '',
+      city: primary.city || '', state: primary.state || '', coordinate: postalCoordinate(primary.location?.coordinates) };
+  }
+  const result = await fetchPostalJson(`https://viacep.com.br/ws/${digits}/json/`);
+  if (!result) throw new Error('A busca por CEP está indisponível. Você pode preencher o endereço manualmente.');
   if (result.erro) throw new Error('CEP não encontrado. Confira os dígitos e tente novamente.');
-  return { cep: `${cep.slice(0, 5)}-${cep.slice(5)}`, street: result.logradouro || '',
-    neighborhood: result.bairro || '', city: result.localidade || '', state: result.uf || '' };
+  return { cep, street: result.logradouro || '', neighborhood: result.bairro || '',
+    city: result.localidade || '', state: result.uf || '', coordinate: null };
 }
 
 export function equipmentAddress(fields, sensor) {

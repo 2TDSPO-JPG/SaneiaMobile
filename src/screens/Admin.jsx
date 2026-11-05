@@ -1,3 +1,4 @@
+import * as Location from 'expo-location';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { Text } from 'react-native';
@@ -76,6 +77,12 @@ function readNumber(value) {
   return /^-?(?:\d+(?:\.\d*)?|\.\d+)$/.test(clean) ? Number(clean) : NaN;
 }
 
+function readCoordinate(fields) {
+  const latitude = readNumber(fields.latitude);
+  const longitude = readNumber(fields.longitude);
+  return Math.abs(latitude) <= 90 && Math.abs(longitude) <= 180 ? { latitude, longitude } : null;
+}
+
 function equipmentInput(fields, sensor) {
   const prefix = fields.prefix.trim().toUpperCase();
   const name = fields.name.trim();
@@ -83,10 +90,9 @@ function equipmentInput(fields, sensor) {
   if (!/^[A-Z0-9][A-Z0-9_-]{1,29}$/.test(prefix)) throw new Error('Use de 2 a 30 letras, números, hífens ou sublinhados no prefixo.');
   if (!name || !equipmentType) throw new Error('Preencha nome e tipo do equipamento.');
   const address = equipmentAddress(fields, sensor);
-  const latitude = readNumber(fields.latitude);
-  const longitude = readNumber(fields.longitude);
-  if (!(Math.abs(latitude) <= 90 && Math.abs(longitude) <= 180)) {
-    throw new Error('Informe latitude entre -90 e 90 e longitude entre -180 e 180.');
+  const coordinate = readCoordinate(fields);
+  if (!coordinate) {
+    throw new Error('Defina a localização do equipamento pelo CEP, pela sua localização ou pelo ajuste manual.');
   }
   const capacity = readNumber(fields.capacity);
   const limit = readNumber(fields.limit);
@@ -95,7 +101,7 @@ function equipmentInput(fields, sensor) {
     throw new Error('Informe uma capacidade positiva e um limite entre zero e a capacidade.');
   }
   if (!(Number.isFinite(radiusMeters) && radiusMeters > 0)) throw new Error('Informe um raio de cobertura positivo.');
-  const data = { prefix, name, ...address, equipmentType, coordinate: { latitude, longitude }, capacity, limit, radiusMeters };
+  const data = { prefix, name, ...address, equipmentType, coordinate, capacity, limit, radiusMeters };
   if (!demoMode) return data;
   const simulatedVolume = fields.volume.trim() ? readNumber(fields.volume) : null;
   if (simulatedVolume != null && !(simulatedVolume >= 0 && simulatedVolume <= capacity)) {
@@ -112,6 +118,9 @@ function EquipmentForm({ sensor }) {
   const [error, setError] = useState('');
   const [lookupBusy, setLookupBusy] = useState(false);
   const [lookupError, setLookupError] = useState('');
+  const [locating, setLocating] = useState(false);
+  const [locationSource, setLocationSource] = useState(sensor.coordinate ? 'saved' : null);
+  const [showCoordinates, setShowCoordinates] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [fields, setFields] = useState({
     prefix: sensor.prefix ?? '', name: sensor.name ?? '',
@@ -122,24 +131,53 @@ function EquipmentForm({ sensor }) {
     capacity: String(sensor.capacity ?? ''), limit: String(sensor.limit ?? ''), radiusMeters: String(sensor.radiusMeters ?? 200),
     volume: sensor.status === 'offline' ? '' : String(sensor.volume ?? ''),
   });
-  const field = (key, label, props) => <Field label={label} value={fields[key]} editable={!busy}
-    onChangeText={(value) => {
-      if (key === 'cep') setLookupError('');
-      setFields((current) => ({ ...current, [key]: value }));
-    }} {...props} />;
+  const formBusy = busy || lookupBusy || locating;
+  const currentCoordinate = readCoordinate(fields);
+  const field = (key, label, props) => <Field label={label} value={fields[key]} editable={!formBusy}
+    onChangeText={(value) => changeField(key, value)} {...props} />;
   const decimal = { keyboardType: 'numbers-and-punctuation' };
-  const addressField = { editable: !busy && !lookupBusy };
+
+  function changeField(key, value) {
+    const changedCep = key === 'cep' && value.replace('-', '') !== fields.cep.replace('-', '');
+    if (key === 'cep') setLookupError('');
+    if (changedCep) setLocationSource(null);
+    if (key === 'latitude' || key === 'longitude') setLocationSource('manual');
+    setFields((current) => ({ ...current, [key]: value, ...(changedCep && { latitude: '', longitude: '' }) }));
+  }
+
+  function applyCoordinate(coordinate, source) {
+    setFields((current) => ({ ...current, latitude: String(coordinate.latitude), longitude: String(coordinate.longitude) }));
+    setLocationSource(source);
+  }
 
   async function searchCep() {
     setLookupError('');
+    setError('');
     setLookupBusy(true);
     try {
-      const found = await lookupCep(fields.cep);
-      setFields((current) => ({ ...current, ...found }));
+      const { coordinate, ...address } = await lookupCep(fields.cep);
+      setFields((current) => ({ ...current, ...address }));
+      const keepCurrent = currentCoordinate && ['saved', 'gps', 'manual'].includes(locationSource);
+      if (coordinate && !keepCurrent) applyCoordinate(coordinate, 'cep');
     } catch (failure) {
       setLookupError(failure.message);
     } finally {
       setLookupBusy(false);
+    }
+  }
+
+  async function locate() {
+    setError('');
+    setLocating(true);
+    try {
+      const permission = await Location.requestForegroundPermissionsAsync();
+      if (!permission.granted) throw new Error('Permita o acesso à localização para usar a posição atual.');
+      const { coords } = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+      applyCoordinate(coords, 'gps');
+    } catch (failure) {
+      setError(errorText(failure));
+    } finally {
+      setLocating(false);
     }
   }
 
@@ -166,24 +204,31 @@ function EquipmentForm({ sensor }) {
     <Card>
       <Text style={styles.section}>Endereço do equipamento</Text>
       {!!sensor.id && !sensor.postalAddress && <Notice text={`Endereço anterior: ${sensor.address}. Para atualizá-lo, preencha o endereço completo.`} />}
-      {field('cep', 'CEP', { ...addressField, keyboardType: 'number-pad', maxLength: 9, placeholder: '00000-000' })}
-      <Button title="Buscar CEP" icon="search" secondary busy={lookupBusy} disabled={busy || confirmDelete} onPress={searchCep} />
+      {field('cep', 'CEP', { keyboardType: 'number-pad', maxLength: 9, placeholder: '00000-000' })}
+      <Button title="Buscar CEP" icon="search" secondary busy={lookupBusy} disabled={busy || locating || confirmDelete} onPress={searchCep} />
       <Notice error text={lookupError} />
-      {field('street', 'Logradouro', { ...addressField, maxLength: 120 })}
-      {field('number', 'Número', { ...addressField, maxLength: 20, placeholder: 'Ex.: 25 ou S/N' })}
-      {field('neighborhood', 'Bairro ou região', { ...addressField, maxLength: 80 })}
-      {field('city', 'Cidade', { ...addressField, maxLength: 80 })}
-      {field('state', 'UF', { ...addressField, autoCapitalize: 'characters', maxLength: 2 })}
-      {field('complement', 'Complemento (opcional)', { ...addressField, maxLength: 120 })}
+      {field('street', 'Logradouro', { maxLength: 120 })}
+      {field('number', 'Número', { maxLength: 20, placeholder: 'Ex.: 25 ou S/N' })}
+      {field('neighborhood', 'Bairro ou região', { maxLength: 80 })}
+      {field('city', 'Cidade', { maxLength: 80 })}
+      {field('state', 'UF', { autoCapitalize: 'characters', maxLength: 2 })}
+      {field('complement', 'Complemento (opcional)', { maxLength: 120 })}
     </Card>
     <Card>
       <Text style={styles.section}>Localização no mapa</Text>
-      <Body>Informe as coordenadas do ponto onde o equipamento está instalado.</Body>
-      {field('latitude', 'Latitude', decimal)}
-      {field('longitude', 'Longitude', decimal)}
-      {demoMode && <Button title="Usar coordenadas de exemplo" secondary disabled={busy}
-        onPress={() => setFields((current) => ({ ...current,
-          latitude: String(demoCenter.latitude), longitude: String(demoCenter.longitude) }))} />}
+      {locationSource === 'cep'
+        ? <Notice text="Localização aproximada preenchida pelo CEP." />
+        : <Body>{currentCoordinate ? 'Localização definida para este equipamento.'
+          : 'Busque o CEP para preencher a localização. Se o ponto não estiver disponível, use a localização atual no local da instalação.'}</Body>}
+      <Button title="Usar minha localização" secondary icon="crosshair" busy={locating} disabled={busy || lookupBusy || confirmDelete} onPress={locate} />
+      <Button title={showCoordinates ? 'Ocultar coordenadas' : 'Ajustar coordenadas manualmente'} secondary
+        disabled={formBusy} onPress={() => setShowCoordinates(!showCoordinates)} />
+      {showCoordinates && <>
+        {field('latitude', 'Latitude', decimal)}
+        {field('longitude', 'Longitude', decimal)}
+      </>}
+      {demoMode && <Button title="Usar coordenadas de exemplo" secondary disabled={formBusy}
+        onPress={() => applyCoordinate(demoCenter, 'example')} />}
     </Card>
     <Card>
       {field('capacity', 'Capacidade (L)', decimal)}
@@ -197,12 +242,12 @@ function EquipmentForm({ sensor }) {
     </Card>
     <Notice error text={error} />
     <Button title="Salvar equipamento" icon="save" busy={busy && !confirmDelete}
-      disabled={confirmDelete || lookupBusy} onPress={() => submit()} />
+      disabled={confirmDelete || lookupBusy || locating} onPress={() => submit()} />
     {!!sensor.id && (confirmDelete ? <Card>
       <Notice text="Confirme a retirada deste equipamento do mapa e do catálogo." />
       <Button title="Confirmar exclusão" danger busy={busy} onPress={() => submit(true)} />
       <Button title="Cancelar exclusão" secondary disabled={busy} onPress={() => setConfirmDelete(false)} />
-    </Card> : <Button title="Excluir equipamento" icon="trash-2" danger disabled={busy || lookupBusy}
+    </Card> : <Button title="Excluir equipamento" icon="trash-2" danger disabled={formBusy}
       onPress={() => setConfirmDelete(true)} />)}
   </>;
 }
