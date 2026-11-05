@@ -16,6 +16,7 @@ O fluxo avaliado usa **React Native, Expo SDK 58, Expo Router e AsyncStorage**. 
 | --- | --- | --- |
 | Morador | `morador@saneia.test` | `Saneia2026!` |
 | Operadora | `operadora@saneia.test` | `Saneia2026!` |
+| Administrador | `admin@saneia.test` | `Saneia2026!` |
 
 ### Fluxo para demonstrar
 
@@ -27,30 +28,40 @@ O fluxo avaliado usa **React Native, Expo SDK 58, Expo Router e AsyncStorage**. 
 
 **Vídeo da entrega** — link do YouTube a preencher depois da gravação. O vídeo deve ter até três minutos e pode ser público ou não listado.
 
+### Preparar equipamentos para a apresentação
+
+1. Entre como administrador e abra **Equipamentos**.
+2. Toque em **Cadastrar equipamento**. Informe prefixo, nome, bairro, endereço, coordenadas, capacidade, limite e raio de cobertura. O formulário oferece coordenadas de exemplo.
+3. Para uma demonstração com limite de 1.800 L, use 1.000 L para **OK**, 1.600 L para **Alerta**, 1.800 L para **Alarme** ou deixe o volume vazio para **Sem comunicação**.
+4. Salve e entre como operadora no mesmo dispositivo ou navegador para conferir o equipamento no mapa. Para editar ou excluir, volte à conta de administrador e abra o equipamento no catálogo.
+
+O catálogo local é salvo em AsyncStorage e compartilhado entre os perfis no mesmo dispositivo ou navegador. A aba **Usuários** lista as três contas de teste em modo local e as contas retornadas pelo Spring Boot quando a API está ativa. O volume editável faz parte da simulação local.
+
 ## Executar no Expo Go
 
 1. Abra o terminal nesta pasta. Use Node.js 22.13 ou superior.
 2. Rode `npm ci` (ou `npm install` se ainda não houver lockfile).
 3. Rode `npm start -- --clear` e escaneie o novo QR Code com o Expo Go em um celular na mesma rede. O projeto usa o SDK 58. Use o Expo Go para SDK 58.
-4. Na tela inicial, entre com uma conta de teste ou escolha **Explorar como morador** ou **Explorar como operadora**.
+4. Na tela inicial, entre com uma conta de teste ou escolha um perfil de demonstração.
 
 `npm run web` abre a versão de revisão no navegador, com mapa esquemático. Em Android e iOS o app usa o mapa nativo. `npm run lint` valida o código.
 
 ## O que esta etapa permite demonstrar
 
-- Login com duas contas de teste locais. O cadastro de contas reais usa a API quando configurada.
+- Login com três contas de teste locais. O cadastro de moradores usa a API quando configurada.
 - Morador com início, novo relato, foto da galeria, GPS ou ponto no mapa, consulta de cobertura e protocolos.
 - CRUD de relatos. O morador pode editar ou excluir enquanto estiver em **Recebido**.
 - Operadora com visão geral, mapa e filtros, detalhes dos sensores, volume estimado, capacidade, limite, previsão e histórico.
 - Menu Relatos da operadora com todos os protocolos, filtros por categoria e consulta por bairro. Mapa e detalhes de equipamentos exibem apenas informações de monitoramento.
 - Atendimento de **Recebido** a **Em atendimento** e **Encerrado**, com desfecho visível ao morador.
+- Administração com lista de usuários por perfil e cadastro, edição e exclusão de equipamentos.
 - Perfil, logout e tela **Sobre o App**. O hash é lido do Git na geração da configuração ou informado por `SANEIA_COMMIT_HASH`.
 
 Os relatos e complementos são salvos no dispositivo ou navegador na demonstração. O intervalo de 20 dias se aplica à mesma categoria e a locais a até 75 m para o mesmo morador. Outros problemas podem ser relatados sem espera. Abra o protocolo fictício de mau cheiro do Setor Norte e toque em **Relatar que o problema continua** para testar o vínculo e a prioridade. Se o novo protocolo estiver dentro do prazo, use **Adicionar informação ou foto** no protocolo em aberto. A operadora vê os complementos no histórico do mesmo protocolo. O ambiente integrado depende da validação no Spring Boot.
 
 ## Integrações opcionais
 
-Para usar Wokwi, HiveMQ e Gemini em uma demonstração do monitoramento, siga o [guia da ponte IoT](../saneia-iot/README.md).
+Para usar Wokwi, HiveMQ e Gemini, consulte o README do projeto complementar `saneia-iot`. Com a ponte ativa, as leituras e os limites do equipamento S07 vêm da ponte. Os demais equipamentos do catálogo local usam dados de demonstração.
 
 ### Integrar com o Java
 

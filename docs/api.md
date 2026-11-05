@@ -18,8 +18,14 @@ O prefixo da API pode fazer parte de `EXPO_PUBLIC_API_URL` (por exemplo, `http:/
 | GET /sensors | — | Sensor[] |
 | GET /sensors/{id} | — | Sensor |
 | POST /sensors/{id}/insights | period, from, to | { summary } com análise textual |
+| GET /admin/users | — | User[] com id, name, email e role |
+| GET /admin/sensors | — | Sensor[] com os equipamentos ativos |
+| GET /admin/sensors/{id} | — | Sensor |
+| POST /admin/sensors | SensorInput | Sensor criado |
+| PATCH /admin/sensors/{id} | SensorInput | Sensor atualizado |
+| DELETE /admin/sensors/{id} | — | 204 sem corpo |
 
-- **Session** contém `token` e `user: { id, name, email, role }`, com papel `resident` ou `operator`.
+- **Session** contém `token` e `user: { id, name, email, role }`, com papel `resident`, `operator` ou `admin`.
 - **ReportInput** contém `category`, `description`, `address`, `neighborhood` e `coordinate: { latitude, longitude }`. O app usa JSON sem foto. Com foto, usa multipart com a parte textual `report` contendo o JSON e a parte binária `photo`. Em edição, a ausência de uma nova foto mantém a anterior.
 - **Report** contém os campos de ReportInput mais `id`, `protocol`, `status`, `createdAt`, `photoUrl`, `sensorId` e `resolution`. As três últimas propriedades aceitam null. A foto deve usar URL acessível ao destinatário autorizado, por exemplo, URL assinada.
 - **Sensor** inclui `id`, `prefix`, `name`, `address`, `neighborhood`, `coordinate`, `status`, `capacity`, `limit`, `volume`, `lastReadingAt`, `etaHours`, `alarmsSixMonths` e `readings`. `summary`, `reason` e `events: [{ id, status, at, message }]` são opcionais. Volumes são em litros, datas em ISO 8601 e `readings` é uma lista de volumes em ordem cronológica. Estados: `normal` (OK), `warning` (alerta), `alarm` (limite atingido) e `offline`.
@@ -33,3 +39,11 @@ A operadora pode registrar uma solicitação de avaliação técnica por protoco
 O servidor deve verificar o intervalo de 20 dias na mesma transação da criação. A regra compara protocolos do mesmo morador, da mesma categoria e a até 75 m. Protocolos encerrados não bloqueiam novas ocorrências. A exclusão deve ocultar o protocolo e manter os dados mínimos da abertura para a regra. Dentro do intervalo, responda 409 com `code: REPORT_COOLDOWN`, `message` contendo a data de liberação e `existingReportId` se houver protocolo aberto que possa ser complementado. Passado o prazo, vincule um protocolo anterior ainda aberto via `previousReportId` e `previousProtocol`. A operadora pode informar `progressNote` sem alterar o status.
 
 O morador pode complementar seus protocolos em aberto sem esperar 20 dias. A operação é aditiva e não altera a data de abertura nem o status. Recebe JSON com `note` de até 600 caracteres ou multipart com parte textual `report` contendo o JSON e parte binária `photo`. Exige pelo menos um dos dois. O retorno de detalhe do protocolo inclui `updates: [{ id, createdAt, note, photoUrl }]` para o dono e a operadora.
+
+## Administração
+
+As rotas `/admin/*` exigem o papel `admin` validado no Spring Boot. Retorne 401 para sessão ausente ou inválida e 403 para uma conta autenticada sem permissão. A conta administrativa é provisionada no servidor. O cadastro público cria apenas moradores. A lista de usuários retorna somente `id`, `name`, `email` e `role`.
+
+**SensorInput** contém `prefix`, `name`, `equipmentType`, `address`, `neighborhood`, `coordinate: { latitude, longitude }`, `capacity`, `limit` e `radiusMeters`. O prefixo tem de 2 a 30 caracteres e deve ser único sem distinção de maiúsculas e minúsculas. Use 409 com `message` para prefixo duplicado. A capacidade e o limite são em litros, com `0 < limit <= capacity`. O raio é positivo e medido em metros. Latitude e longitude são números nos intervalos de -90 a 90 e -180 a 180, respectivamente.
+
+O servidor gera um `id` estável, mantém as leituras e inicia um novo equipamento em `offline` até a primeira medição. A edição atualiza apenas os campos do catálogo. A exclusão retira o equipamento do catálogo, do mapa e da busca de cobertura, preservando as leituras e o vínculo de protocolos existentes. As rotas de monitoramento da operadora consultam o mesmo catálogo ativo.
