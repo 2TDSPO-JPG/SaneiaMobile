@@ -1,5 +1,5 @@
 import { Feather } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { Redirect, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { api, demoMode, demoSession } from '../services/api';
@@ -68,8 +68,13 @@ function AuthForm({ signup }) {
   );
 }
 
-export const LoginScreen = () => <AuthForm signup={false} />;
-export const SignupScreen = () => <AuthForm signup />;
+function AuthEntry({ signup = false }) {
+  const { session } = useSession();
+  return session ? <Redirect href="/inicio" /> : <AuthForm signup={signup} />;
+}
+
+export const LoginScreen = () => <AuthEntry />;
+export const SignupScreen = () => <AuthEntry signup />;
 
 const auth = StyleSheet.create({
   hero: { backgroundColor: colors.ink, padding: 21, borderRadius: 22, gap: 10 },

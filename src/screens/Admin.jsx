@@ -4,6 +4,7 @@ import { Text } from 'react-native';
 import { EquipmentFilters, filterEquipment, Filters } from '../components/Operations';
 import { demoCenter } from '../data/demo';
 import { api, demoMode, liveIotDemo } from '../services/api';
+import { equipmentAddress, lookupCep } from '../services/postal-address';
 import { useErrorText, useSession } from '../session';
 import { equipmentStatus, roleLabels, sensorStatus } from '../theme';
 import { useResource } from '../use-resource';
@@ -75,14 +76,13 @@ function readNumber(value) {
   return /^-?(?:\d+(?:\.\d*)?|\.\d+)$/.test(clean) ? Number(clean) : NaN;
 }
 
-function equipmentInput(fields) {
+function equipmentInput(fields, sensor) {
   const prefix = fields.prefix.trim().toUpperCase();
   const name = fields.name.trim();
-  const neighborhood = fields.neighborhood.trim();
-  const address = fields.address.trim();
   const equipmentType = fields.equipmentType.trim();
   if (!/^[A-Z0-9][A-Z0-9_-]{1,29}$/.test(prefix)) throw new Error('Use de 2 a 30 letras, números, hífens ou sublinhados no prefixo.');
-  if (!name || !neighborhood || !address || !equipmentType) throw new Error('Preencha nome, bairro, endereço e tipo.');
+  if (!name || !equipmentType) throw new Error('Preencha nome e tipo do equipamento.');
+  const address = equipmentAddress(fields, sensor);
   const latitude = readNumber(fields.latitude);
   const longitude = readNumber(fields.longitude);
   if (!(Math.abs(latitude) <= 90 && Math.abs(longitude) <= 180)) {
@@ -95,7 +95,7 @@ function equipmentInput(fields) {
     throw new Error('Informe uma capacidade positiva e um limite entre zero e a capacidade.');
   }
   if (!(Number.isFinite(radiusMeters) && radiusMeters > 0)) throw new Error('Informe um raio de cobertura positivo.');
-  const data = { prefix, name, address, neighborhood, equipmentType, coordinate: { latitude, longitude }, capacity, limit, radiusMeters };
+  const data = { prefix, name, ...address, equipmentType, coordinate: { latitude, longitude }, capacity, limit, radiusMeters };
   if (!demoMode) return data;
   const simulatedVolume = fields.volume.trim() ? readNumber(fields.volume) : null;
   if (simulatedVolume != null && !(simulatedVolume >= 0 && simulatedVolume <= capacity)) {
@@ -110,24 +110,45 @@ function EquipmentForm({ sensor }) {
   const errorText = useErrorText();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [lookupBusy, setLookupBusy] = useState(false);
+  const [lookupError, setLookupError] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [fields, setFields] = useState({
-    prefix: sensor.prefix ?? '', name: sensor.name ?? '', address: sensor.address ?? '',
+    prefix: sensor.prefix ?? '', name: sensor.name ?? '',
     neighborhood: sensor.neighborhood ?? '', equipmentType: sensor.equipmentType ?? 'Reservatório com sensor de nível',
+    cep: '', street: '', number: '', city: '', state: '', complement: '',
+    ...(sensor.postalAddress && { ...sensor.postalAddress, complement: sensor.postalAddress.complement ?? '' }),
     latitude: String(sensor.coordinate?.latitude ?? ''), longitude: String(sensor.coordinate?.longitude ?? ''),
     capacity: String(sensor.capacity ?? ''), limit: String(sensor.limit ?? ''), radiusMeters: String(sensor.radiusMeters ?? 200),
     volume: sensor.status === 'offline' ? '' : String(sensor.volume ?? ''),
   });
   const field = (key, label, props) => <Field label={label} value={fields[key]} editable={!busy}
-    onChangeText={(value) => setFields((current) => ({ ...current, [key]: value }))} {...props} />;
+    onChangeText={(value) => {
+      if (key === 'cep') setLookupError('');
+      setFields((current) => ({ ...current, [key]: value }));
+    }} {...props} />;
   const decimal = { keyboardType: 'numbers-and-punctuation' };
+  const addressField = { editable: !busy && !lookupBusy };
+
+  async function searchCep() {
+    setLookupError('');
+    setLookupBusy(true);
+    try {
+      const found = await lookupCep(fields.cep);
+      setFields((current) => ({ ...current, ...found }));
+    } catch (failure) {
+      setLookupError(failure.message);
+    } finally {
+      setLookupBusy(false);
+    }
+  }
 
   async function submit(remove = false) {
     setError('');
     setBusy(true);
     try {
       if (remove) await api.deleteEquipment(session, sensor.id);
-      else await api.saveEquipment(session, equipmentInput(fields), sensor.id);
+      else await api.saveEquipment(session, equipmentInput(fields, sensor), sensor.id);
       router.dismissTo('/equipamentos');
     } catch (failure) {
       setError(errorText(failure));
@@ -141,8 +162,23 @@ function EquipmentForm({ sensor }) {
       {field('prefix', 'Prefixo', { autoCapitalize: 'characters', maxLength: 30, placeholder: 'Ex.: RES-21' })}
       {field('name', 'Nome do equipamento', { maxLength: 100 })}
       {field('equipmentType', 'Tipo', { maxLength: 100 })}
-      {field('neighborhood', 'Bairro ou região', { maxLength: 80 })}
-      {field('address', 'Endereço ou referência', { maxLength: 160 })}
+    </Card>
+    <Card>
+      <Text style={styles.section}>Endereço do equipamento</Text>
+      {!!sensor.id && !sensor.postalAddress && <Notice text={`Endereço anterior: ${sensor.address}. Para atualizá-lo, preencha o endereço completo.`} />}
+      {field('cep', 'CEP', { ...addressField, keyboardType: 'number-pad', maxLength: 9, placeholder: '00000-000' })}
+      <Button title="Buscar CEP" icon="search" secondary busy={lookupBusy} disabled={busy || confirmDelete} onPress={searchCep} />
+      <Notice error text={lookupError} />
+      {field('street', 'Logradouro', { ...addressField, maxLength: 120 })}
+      {field('number', 'Número', { ...addressField, maxLength: 20, placeholder: 'Ex.: 25 ou S/N' })}
+      {field('neighborhood', 'Bairro ou região', { ...addressField, maxLength: 80 })}
+      {field('city', 'Cidade', { ...addressField, maxLength: 80 })}
+      {field('state', 'UF', { ...addressField, autoCapitalize: 'characters', maxLength: 2 })}
+      {field('complement', 'Complemento (opcional)', { ...addressField, maxLength: 120 })}
+    </Card>
+    <Card>
+      <Text style={styles.section}>Localização no mapa</Text>
+      <Body>Informe as coordenadas do ponto onde o equipamento está instalado.</Body>
       {field('latitude', 'Latitude', decimal)}
       {field('longitude', 'Longitude', decimal)}
       {demoMode && <Button title="Usar coordenadas de exemplo" secondary disabled={busy}
@@ -161,12 +197,12 @@ function EquipmentForm({ sensor }) {
     </Card>
     <Notice error text={error} />
     <Button title="Salvar equipamento" icon="save" busy={busy && !confirmDelete}
-      disabled={confirmDelete} onPress={() => submit()} />
+      disabled={confirmDelete || lookupBusy} onPress={() => submit()} />
     {!!sensor.id && (confirmDelete ? <Card>
       <Notice text="Confirme a retirada deste equipamento do mapa e do catálogo." />
       <Button title="Confirmar exclusão" danger busy={busy} onPress={() => submit(true)} />
       <Button title="Cancelar exclusão" secondary disabled={busy} onPress={() => setConfirmDelete(false)} />
-    </Card> : <Button title="Excluir equipamento" icon="trash-2" danger disabled={busy}
+    </Card> : <Button title="Excluir equipamento" icon="trash-2" danger disabled={busy || lookupBusy}
       onPress={() => setConfirmDelete(true)} />)}
   </>;
 }

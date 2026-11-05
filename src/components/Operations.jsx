@@ -38,7 +38,7 @@ export function EquipmentRows({ equipment }) {
   });
 }
 
-export function ReportQueue({ reports, operator = false }) {
+export function ReportQueue({ reports, operator = false, equipmentById }) {
   const router = useRouter();
   const [category, setCategory] = useState('all');
   const [coverage, setCoverage] = useState('all');
@@ -67,9 +67,11 @@ export function ReportQueue({ reports, operator = false }) {
     {visible.map((report) => {
       const status = reportStatus[report.status];
       const priority = operator && report.previousReportId && report.status !== 'closed';
+      const equipment = equipmentById?.get(String(report.sensorId));
+      const equipmentAddress = equipment?.address ? `\nEquipamento ${equipment.prefix || equipment.id} · ${equipment.address}` : '';
       return <ListItem key={report.id} title={report.category}
         description={`${report.protocol} · ${report.address}`} icon="file-text"
-        metadata={operator ? `Aberto em ${reportDate(report.createdAt)}\n${report.sensorId ? 'Com equipamento próximo' : 'Sem equipamento próximo'}${report.assessment ? ' · Avaliação solicitada' : ''}` : undefined}
+        metadata={operator ? `Aberto em ${reportDate(report.createdAt)}\n${report.sensorId ? 'Com equipamento próximo' : 'Sem equipamento próximo'}${report.assessment ? ' · Avaliação solicitada' : ''}${equipmentAddress}` : undefined}
         badge={priority ? `Prioridade · ${status.label}` : status.label} tone={priority ? 'red' : status.tone}
         onPress={() => router.push({ pathname: '/relato/[id]', params: { id: report.id } })} />;
     })}

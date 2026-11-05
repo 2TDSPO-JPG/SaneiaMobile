@@ -1,7 +1,7 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { Image, Text } from 'react-native';
-import { ReportQueue } from '../components/Operations';
+import { EquipmentRows, ReportQueue } from '../components/Operations';
 import { ReportUpdates } from '../components/ReportUpdates';
 import { api } from '../services/api';
 import { useErrorText, useSession } from '../session';
@@ -13,6 +13,34 @@ const byScope = (reports, scope) => scope === 'open' ? reports.filter((item) => 
   : scope === 'closed' ? reports.filter((item) => item.status === 'closed')
     : scope === 'priority' ? reports.filter((item) => item.status !== 'closed' && item.previousReportId) : reports;
 const matchesArea = (item, name) => areaKey(areaName(item)) === areaKey(name);
+
+const searchKey = (value) => areaKey(value).replace(/[^a-z0-9]+/g, ' ').trim();
+
+function matchesAddress(query, ...items) {
+  const normalized = searchKey(query);
+  if (!normalized) return true;
+  const addresses = searchKey(items.filter(Boolean).flatMap((item) => [
+    item.address, item.neighborhood, item.city, item.prefix, ...Object.values(item.postalAddress ?? {}),
+  ]).join(' '));
+  return normalized.split(' ').every((word) => addresses.includes(word));
+}
+
+async function loadOperatorReports(session) {
+  const [reports, equipment] = await Promise.allSettled([api.listReports(session), api.sensors(session)]);
+  if (reports.status === 'rejected') throw reports.reason;
+  const sensors = equipment.status === 'fulfilled' ? equipment.value : [];
+  return {
+    reports: reports.value,
+    sensors,
+    equipmentById: new Map(sensors.map((sensor) => [String(sensor.id), sensor])),
+    equipmentUnavailable: equipment.status === 'rejected',
+  };
+}
+
+function AddressSearch({ query, onChange }) {
+  return <Field label="Pesquisar por endereço" value={query} onChangeText={onChange}
+    placeholder="Rua, endereço, bairro, cidade ou CEP" />;
+}
 
 export function ReportListScreen() {
   const { session } = useSession();
@@ -34,25 +62,28 @@ function ResidentReports({ scope }) {
 
 function OperatorReports({ scope }) {
   const router = useRouter();
-  const state = useResource(api.listReports);
+  const state = useResource(loadOperatorReports);
+  const [query, setQuery] = useState('');
   return <Screen tabs>
     <Heading kicker="Área da operadora"
       title={scope === 'priority' ? 'Recorrências prioritárias' : scope === 'open' ? 'Relatos em aberto' : 'Relatos recebidos'}
       subtitle="Consulte os protocolos, filtre por categoria e atualize os atendimentos." />
     {!!scope && <Button secondary title="Ver todos os relatos" onPress={() => router.setParams({ scope: '' })} />}
-    <Resource state={state}>{(reports) => {
-      const visible = byScope(reports, scope);
+    <AddressSearch query={query} onChange={setQuery} />
+    <Resource state={state}>{({ reports, equipmentById, equipmentUnavailable }) => {
+      const visible = byScope(reports, scope).filter((report) => matchesAddress(query, report, equipmentById.get(String(report.sensorId))));
       const names = [...new Map(visible.map((item) => {
         const name = areaName(item);
         return [areaKey(name), name];
       })).values()].sort((a, b) => a.localeCompare(b, 'pt-BR'));
       return <>
-        <ReportQueue key={scope || 'all'} reports={visible} operator />
+        {equipmentUnavailable && <Notice text="O catálogo está indisponível. A busca está usando os endereços dos relatos." />}
+        <ReportQueue key={scope || 'all'} reports={visible} equipmentById={equipmentById} operator />
         {names.length > 0 && <Text style={styles.section}>Relatos por bairro</Text>}
         {names.map((name) => {
           const count = visible.filter((item) => matchesArea(item, name)).length;
           return <ListItem key={name} title={name} icon="map-pin" description={count === 1 ? '1 relato' : `${count} relatos`}
-            onPress={() => router.push({ pathname: '/bairro/[name]', params: { name, scope: scope || '' } })} />;
+            onPress={() => router.push({ pathname: '/bairro/[name]', params: { name, scope: scope || '', query } })} />;
         })}
       </>;
     }}</Resource>
@@ -60,23 +91,31 @@ function OperatorReports({ scope }) {
 }
 
 export function NeighborhoodScreen() {
-  const { name, scope } = useLocalSearchParams();
+  const { name, scope, query: initialQuery } = useLocalSearchParams();
   const router = useRouter();
   const { session } = useSession();
-  const state = useResource(loadNeighborhoodReports);
+  const state = useResource(loadOperatorReports);
+  const [query, setQuery] = useState(typeof initialQuery === 'string' ? initialQuery : '');
   if (session?.user.role !== 'operator') return <Screen back><Notice error text="Área exclusiva da operadora." /></Screen>;
   return <Screen back>
     <Heading kicker="Relatos por bairro" title={name} subtitle="Consulte os protocolos registrados neste bairro." />
     {!!scope && <Button secondary title="Ver todos os relatos do bairro" onPress={() => router.setParams({ scope: '' })} />}
-    <Resource state={state}>{(reports) => <>
-      <Text style={styles.section}>{scope === 'priority' ? 'Recorrências prioritárias' : scope === 'open' ? 'Relatos em aberto' : 'Relatos do bairro'}</Text>
-      <ReportQueue key={scope || 'all'} reports={byScope(reports.filter((report) => matchesArea(report, name)), scope)} operator />
-    </>}</Resource>
+    <AddressSearch query={query} onChange={setQuery} />
+    <Resource state={state}>{({ reports, sensors, equipmentById, equipmentUnavailable }) => {
+      const visible = byScope(reports, scope).filter((report) => matchesArea(report, name)
+        && matchesAddress(query, report, equipmentById.get(String(report.sensorId))));
+      const neighborhoodEquipment = sensors.filter((sensor) => matchesArea(sensor, name) && matchesAddress(query, sensor));
+      return <>
+        {equipmentUnavailable && <Notice text="O catálogo está indisponível. Os relatos do bairro continuam acessíveis." />}
+        <Text style={styles.section}>{scope === 'priority' ? 'Recorrências prioritárias' : scope === 'open' ? 'Relatos em aberto' : 'Relatos do bairro'}</Text>
+        <ReportQueue key={scope || 'all'} reports={visible} equipmentById={equipmentById} operator />
+        {!equipmentUnavailable && <>
+          <Text style={styles.section}>Equipamentos do bairro</Text>
+          <EquipmentRows equipment={neighborhoodEquipment} />
+        </>}
+      </>;
+    }}</Resource>
   </Screen>;
-}
-
-function loadNeighborhoodReports(session) {
-  return session.user.role === 'operator' ? api.listReports(session) : Promise.resolve([]);
 }
 
 export function ReportDetailScreen() {

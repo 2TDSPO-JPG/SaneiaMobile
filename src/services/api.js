@@ -75,8 +75,8 @@ function requireAdmin(session) {
 }
 
 function withTelemetry(sensor, telemetry) {
-  const { prefix, name, address, neighborhood, coordinate, equipmentType, radiusMeters } = sensor;
-  return { ...telemetry, prefix, name, address, neighborhood, coordinate, equipmentType, radiusMeters, liveTelemetry: true };
+  const { prefix, name, address, neighborhood, postalAddress, coordinate, equipmentType, radiusMeters } = sensor;
+  return { ...telemetry, prefix, name, address, neighborhood, postalAddress, coordinate, equipmentType, radiusMeters, liveTelemetry: true };
 }
 
 export function nearestSensor(coordinate, sensors) {

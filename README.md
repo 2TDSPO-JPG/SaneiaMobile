@@ -19,13 +19,15 @@ O [contrato da API](docs/api.md) descreve os métodos, os campos de entrada e sa
 ## Regras que o backend precisa aplicar
 
 - **Contas e acesso.** O login devolve `token` e `user: { id, name, email, role }`. Os papéis são `resident`, `operator` e `admin`. O cadastro público cria moradores. Provisione contas de operadora e administrador pelo backend. Valide o token Bearer, o papel e a propriedade de cada relato no servidor. Retorne `401` para sessão inválida e `403` para conta autenticada sem a permissão exigida.
-- **Catálogo e cobertura.** Use um ID estável e um prefixo único por equipamento. Valide coordenadas, capacidade, limite operacional e raio de cobertura. A cobertura usa o equipamento ativo mais próximo dentro do seu raio e devolve `{ sensorId, status }`, com ambos `null` quando não há cobertura. Ao excluir um equipamento, retire-o do catálogo ativo, do mapa e da cobertura, preservando os vínculos dos protocolos e o histórico.
+- **Catálogo e cobertura.** Use um ID estável e um prefixo único por equipamento. Em novos cadastros, valide `postalAddress` com CEP, logradouro, número, bairro, cidade e UF. O complemento é opcional. O app consulta o ViaCEP para preencher os campos disponíveis e aceita preenchimento manual. A latitude e a longitude são informadas separadamente. Valide também capacidade, limite operacional e raio de cobertura. A cobertura usa o equipamento ativo mais próximo dentro do seu raio e devolve `{ sensorId, status }`, com ambos `null` quando não há cobertura. Ao excluir um equipamento, retire-o do catálogo ativo, do mapa e da cobertura, preservando os vínculos dos protocolos e o histórico.
 - **Relatos.** Gere o protocolo e a data de abertura no servidor. O morador vê os próprios relatos e pode editar ou excluir apenas em `received`. A operadora vê a fila e atualiza de `received` para `in_progress` e depois para `closed`, com desfecho. O app envia as categorias `Retorno de esgoto`, `Vazamento`, `Mau cheiro` e `Outro problema`. Use datas em ISO 8601 e IDs em texto nas respostas.
 - **Recorrência.** Na criação, verifique na mesma transação o intervalo de 20 dias para o mesmo morador, a mesma categoria e ocorrências a até 75 m. Siga o contrato para exclusões e protocolos encerrados. Se bloquear, retorne `409` com `code: "REPORT_COOLDOWN"`, `message` e `existingReportId` quando houver protocolo em aberto. Fora do intervalo, vincule o novo relato ao anterior ainda aberto.
 - **Fotos e complementos.** O app envia JSON quando há apenas texto. Com foto, envia `multipart/form-data` com o JSON na parte textual `report` e o arquivo na parte `photo`. Ao editar sem nova foto, preserve a anterior. Devolva uma `photoUrl` acessível pelo componente de imagem, por exemplo, uma URL assinada. Complementos são adicionados ao histórico de um protocolo em aberto, sem criar outro.
 - **Monitoramento antes do IoT.** Um equipamento recém-cadastrado começa em `offline`, com `volume` e `lastReadingAt` nulos e listas de leituras vazias até receber uma medição. O app consulta o mapa e a ficha a cada cinco segundos no modo integrado. A inclusão de equipamentos no catálogo funciona antes da ingestão de telemetria.
 
 As listas são retornadas como arrays JSON. Os erros usam `{ "message": "..." }` e as exclusões bem-sucedidas respondem com `204` sem corpo. No Oracle, separe o catálogo dos equipamentos do histórico de medições para receber novas leituras sem alterar os dados cadastrais.
+
+Na aba **Relatos** e em **Relatos por bairro**, a operadora pode buscar por rua, bairro, cidade ou CEP. A busca compara os endereços disponíveis no relato e no equipamento vinculado. O detalhe do bairro também lista os equipamentos cadastrados naquele bairro. Para alimentar essas telas, retorne `address`, `neighborhood` e `postalAddress` no catálogo e mantenha `sensorId` nos relatos vinculados.
 
 ## Rodar o app com a API local
 
@@ -37,7 +39,7 @@ As listas são retornadas como arrays JSON. Os erros usam `{ "message": "..." }`
    ```
 
 3. Execute `npx expo start` e pressione **w** para abrir no navegador. Configure o CORS do Spring para a origem exibida pelo Expo e permita os cabeçalhos `Authorization` e `Content-Type` e o preflight `OPTIONS`. Se testar pelo Expo Go no celular, use o IP do computador na rede local no lugar de `localhost`.
-4. Use as contas cadastradas no backend. Faça um teste com os três papéis: cadastre um equipamento como administrador, abra um relato como morador e consulte o equipamento e atualize o protocolo como operadora.
+4. Use as contas cadastradas no backend. Como administrador, cadastre um equipamento usando **Buscar CEP** e complete o número e as coordenadas. Como morador, abra um relato dentro da área de cobertura. Como operadora, procure pelo endereço em **Relatos por bairro** e atualize o protocolo.
 
 Reinicie o Expo após alterar a URL. Com `EXPO_PUBLIC_API_URL` configurada, o app usa o Spring Boot para autenticação, relatos e equipamentos. Os registros locais do AsyncStorage ficam separados dos dados do Oracle.
 
