@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Text } from 'react-native';
-import { api, demoMode, liveIotDemo } from '../services/api';
+import { api, demoMode } from '../services/api';
 import { useErrorText, useSession } from '../session';
 import { liters, reportDate } from '../theme';
 import { Body, Button, Card, Notice, styles } from '../ui';
@@ -44,7 +44,7 @@ export function EquipmentInsights({ sensor, readings, range }) {
         : <Body>São necessárias pelo menos duas leituras com data para comparar a variação no período.</Body>}
       {compared.length > 0 && <Body>{reached} de {compared.length} leituras comparáveis atingiram ou passaram do limite
         {usesCurrentLimit ? ', usando o limite atual quando o histórico não informa o valor vigente' : ''}.</Body>}
-      {demoMode && !liveIotDemo ? <Body>Estes indicadores usam dados de exemplo. Conecte a ponte IoT para gerar uma análise com o Gemini.</Body>
+      {demoMode && !sensor.liveTelemetry ? <Body>Estes indicadores usam dados de exemplo. A análise do Gemini está disponível em equipamentos conectados à ponte IoT.</Body>
         : <Button secondary title={summary ? 'Atualizar análise com IA' : 'Gerar análise com IA'}
           icon="activity" onPress={analyze} busy={busy} disabled={dated.length === 0} />}
       <Notice error text={error} />

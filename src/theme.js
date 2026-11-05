@@ -5,6 +5,12 @@ export const colors = {
   grayBg: '#E9EFEE', warning: '#8A5700', warningBg: '#FFF1BF',
 };
 
+export const roleLabels = {
+  resident: 'Morador',
+  operator: 'Operadora de saneamento',
+  admin: 'Administrador',
+};
+
 export const reportStatus = {
   received: { label: 'Recebido', tone: 'blue' },
   in_progress: { label: 'Em atendimento', tone: 'green' },

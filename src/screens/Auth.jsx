@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { api, demoMode, demoSession } from '../services/api';
 import { useSession } from '../session';
-import { colors } from '../theme';
+import { colors, roleLabels } from '../theme';
 import { Body, Button, Card, Field, Heading, Notice, Screen, styles } from '../ui';
 
 function AuthForm({ signup }) {
@@ -26,7 +26,7 @@ function AuthForm({ signup }) {
     try {
       const input = { email: email.trim().toLowerCase(), password };
       const result = signup ? await api.signup({ ...input, name: name.trim() }) : await api.login(input);
-      if (!result.token || !['resident', 'operator'].includes(result.user?.role)) {
+      if (!result.token || !Object.hasOwn(roleLabels, result.user?.role)) {
         throw new Error('A API retornou uma sessão inválida.');
       }
       setSession(result);
@@ -62,6 +62,7 @@ function AuthForm({ signup }) {
         <Body>Entre com uma conta de teste do README ou explore um dos perfis com dados fictícios.</Body>
         <Button secondary title="Explorar como morador" icon="user" onPress={() => setSession(demoSession('resident'))} />
         <Button secondary title="Explorar como operadora" icon="activity" onPress={() => setSession(demoSession('operator'))} />
+        <Button secondary title="Explorar como administrador" icon="settings" onPress={() => setSession(demoSession('admin'))} />
       </Card>}
     </Screen>
   );

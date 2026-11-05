@@ -3,9 +3,10 @@ import { useRouter } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { api } from '../services/api';
 import { useSession } from '../session';
-import { colors, equipmentStatus } from '../theme';
+import { colors, equipmentStatus, roleLabels } from '../theme';
 import { useResource } from '../use-resource';
 import { Body, Brand, Button, Card, Heading, ListItem, Resource, Screen, styles } from '../ui';
+import { AdminHomeScreen } from './Admin';
 
 async function loadOverview(session) {
   const reports = api.listReports(session);
@@ -23,10 +24,14 @@ function Metric({ label, value, onPress }) {
 }
 
 export function HomeScreen() {
-  const router = useRouter();
   const { session } = useSession();
-  const overview = useResource(loadOverview);
   if (!session) return null;
+  return session.user.role === 'admin' ? <AdminHomeScreen /> : <OperationsHome session={session} />;
+}
+
+function OperationsHome({ session }) {
+  const router = useRouter();
+  const overview = useResource(loadOverview);
   const operator = session.user.role === 'operator';
 
   return <Screen tabs>
@@ -79,7 +84,7 @@ export function ProfileScreen() {
     <Heading kicker="Conta" title="Meu perfil" />
     <Card>
       <Text style={styles.section}>{session.user.name}</Text>
-      <Body>{session.user.role === 'operator' ? 'Operadora de saneamento' : 'Morador'}</Body>
+      <Body>{roleLabels[session.user.role]}</Body>
       {!!session.user.email && <Body>{session.user.email}</Body>}
     </Card>
     <ListItem title="Sobre o App" description="Versão e commit de referência" icon="info" onPress={() => router.push('/sobre')} />

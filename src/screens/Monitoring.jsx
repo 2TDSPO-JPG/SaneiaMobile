@@ -33,7 +33,7 @@ export function MapScreen() {
         coordinate: sensor.coordinate, status: equipmentStatus(sensor), onPress: () => openSensor(sensor.id),
       }));
       return <>
-        {liveIotDemo && sensors.map((sensor) => (
+        {liveIotDemo && sensors.filter((sensor) => sensor.liveTelemetry).map((sensor) => (
           <Notice key={sensor.id} text={sensor.lastReadingAt
             ? `${sensor.prefix || sensor.id} · ${sensor.status === 'offline' ? 'Sem dados novos. ' : ''}Última leitura: ${reportDate(sensor.lastReadingAt)}.`
             : `${sensor.prefix || sensor.id} · A ponte está conectada ao app. Aguardando a primeira leitura do sensor.`} />

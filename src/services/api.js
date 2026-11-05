@@ -1,21 +1,21 @@
-import { demoSensors } from '../data/demo';
 import { readDemo, updateDemo } from '../data/demo-persistence';
 import { distanceMeters, eligibilityMessage, occurrenceEligibility, previousOpenReport, reportOrder } from '../report-policy';
+import { deleteLocalEquipment, localEquipment, localSensor, saveLocalEquipment } from './demo-equipment';
 
 const baseUrl = process.env.EXPO_PUBLIC_API_URL?.trim().replace(/\/+$/, '');
 const iotUrl = process.env.EXPO_PUBLIC_IOT_URL?.trim().replace(/\/+$/, '');
 const iotToken = process.env.EXPO_PUBLIC_IOT_DEMO_TOKEN?.trim();
 export const demoMode = !baseUrl;
 export const liveIotDemo = demoMode && Boolean(iotUrl);
-export const demoSession = (role) => ({
-  token: 'demo',
-  user: { id: `demo-${role}`, name: role === 'operator' ? 'Equipe operadora' : 'Morador', role },
-});
+const demoUsers = [
+  { id: 'demo-resident', name: 'Morador', email: 'morador@saneia.test', role: 'resident' },
+  { id: 'demo-operator', name: 'Equipe operadora', email: 'operadora@saneia.test', role: 'operator' },
+  { id: 'demo-admin', name: 'Administrador', email: 'admin@saneia.test', role: 'admin' },
+];
+export const demoSession = (role) => ({ token: 'demo', user: demoUsers.find((user) => user.role === role) });
 
-const demoRoles = {
-  'morador@saneia.test': 'resident',
-  'operadora@saneia.test': 'operator',
-};
+// A ponte Wokwi atual publica apenas o equipamento S07.
+const bridgeSensorId = 'S07';
 
 async function request(path, { token, method = 'GET', body, apiUrl = baseUrl } = {}) {
   const controller = new AbortController();
@@ -54,6 +54,7 @@ async function request(path, { token, method = 'GET', body, apiUrl = baseUrl } =
 }
 
 const pathFor = (id) => `/reports/${encodeURIComponent(id)}`;
+const adminSensorPath = (id) => id ? `/admin/sensors/${encodeURIComponent(id)}` : '/admin/sensors';
 const iotRequest = (path, options) => request(path, { ...options, apiUrl: iotUrl, token: iotToken });
 const visibleReports = ({ reports }, { user }) => reports
   .filter((report) => !report.deletedAt && (user.role === 'operator' || report.ownerId === user.id)).sort(reportOrder);
@@ -67,6 +68,15 @@ function findReport(state, session, id) {
 function replaceDemoReport(state, report) {
   const reports = state.reports.map((item) => item.id === report.id ? report : item);
   return { state: { ...state, reports }, result: report };
+}
+
+function requireAdmin(session) {
+  if (session?.user.role !== 'admin') throw new Error('Acesso exclusivo da administração.');
+}
+
+function withTelemetry(sensor, telemetry) {
+  const { prefix, name, address, neighborhood, coordinate, equipmentType, radiusMeters } = sensor;
+  return { ...telemetry, prefix, name, address, neighborhood, coordinate, equipmentType, radiusMeters, liveTelemetry: true };
 }
 
 export function nearestSensor(coordinate, sensors) {
@@ -92,9 +102,9 @@ function reportBody({ photo, ...fields }) {
 export const api = {
   async login(input) {
     if (!demoMode) return request('/auth/login', { method: 'POST', body: input });
-    const role = demoRoles[input.email];
-    if (!role || input.password !== 'Saneia2026!') throw new Error('E-mail ou senha incorretos.');
-    return demoSession(role);
+    const user = demoUsers.find((account) => account.email === input.email);
+    if (!user || input.password !== 'Saneia2026!') throw new Error('E-mail ou senha incorretos.');
+    return demoSession(user.role);
   },
   async signup(input) {
     if (demoMode) throw new Error('Para entrar no modo local, use uma conta de teste do README.');
@@ -105,7 +115,7 @@ export const api = {
       const query = `latitude=${encodeURIComponent(coordinate.latitude)}&longitude=${encodeURIComponent(coordinate.longitude)}`;
       return request(`/coverage?${query}`, session);
     }
-    const sensor = nearestSensor(coordinate, await api.sensors(session));
+    const sensor = nearestSensor(coordinate, await localEquipment());
     return { sensorId: sensor?.id ?? null, status: sensor?.status ?? null };
   },
   async listReports(session) {
@@ -121,7 +131,7 @@ export const api = {
         token: session.token, method: id ? 'PATCH' : 'POST', body: await reportBody(input),
       });
     }
-    const coverageSensors = await api.sensors(session);
+    const coverageSensors = await localEquipment();
     return updateDemo((state) => {
       const old = id ? findReport(state, session, id) : null;
       if (session.user.role !== 'resident' || (old && old.status !== 'received')) {
@@ -153,7 +163,7 @@ export const api = {
         photoUrl: photo?.uri ?? old?.photoUrl ?? null,
       };
       const reports = old ? state.reports.map((item) => item.id === id ? report : item) : [report, ...state.reports];
-      return { state: { sequence, reports }, result: report };
+      return { state: { ...state, sequence, reports }, result: report };
     });
   },
   async deleteReport(session, id) {
@@ -209,8 +219,14 @@ export const api = {
     });
   },
   async sensors(session) {
-    if (liveIotDemo) return iotRequest('/sensors');
-    return demoMode ? demoSensors : request('/sensors', session);
+    if (!demoMode) return request('/sensors', session);
+    const sensors = await localEquipment();
+    if (!liveIotDemo || !sensors.some((sensor) => sensor.id === bridgeSensorId)) return sensors;
+    const live = await iotRequest('/sensors');
+    return sensors.map((sensor) => {
+      const telemetry = live.find((item) => item.id === sensor.id);
+      return telemetry ? withTelemetry(sensor, telemetry) : sensor;
+    });
   },
   sensorInsights(session, id, range) {
     const path = `/sensors/${encodeURIComponent(id)}/insights`;
@@ -219,10 +235,30 @@ export const api = {
   },
   async sensor(session, id) {
     const path = `/sensors/${encodeURIComponent(id)}`;
-    if (liveIotDemo) return iotRequest(path);
     if (!demoMode) return request(path, session);
-    const sensor = demoSensors.find((item) => item.id === id);
-    if (!sensor) throw new Error('Sensor não encontrado.');
-    return sensor;
+    const sensor = await localSensor(id);
+    return liveIotDemo && id === bridgeSensorId ? withTelemetry(sensor, await iotRequest(path)) : sensor;
+  },
+  async adminUsers(session) {
+    requireAdmin(session);
+    return demoMode ? demoUsers : request('/admin/users', session);
+  },
+  async adminEquipment(session) {
+    requireAdmin(session);
+    return demoMode ? localEquipment() : request(adminSensorPath(), session);
+  },
+  async adminSensor(session, id) {
+    requireAdmin(session);
+    return demoMode ? localSensor(id) : request(adminSensorPath(id), session);
+  },
+  async saveEquipment(session, input, id) {
+    requireAdmin(session);
+    if (demoMode) return saveLocalEquipment(input, id);
+    return request(adminSensorPath(id), { token: session.token, method: id ? 'PATCH' : 'POST', body: input });
+  },
+  async deleteEquipment(session, id) {
+    requireAdmin(session);
+    if (demoMode) return deleteLocalEquipment(id);
+    return request(adminSensorPath(id), { token: session.token, method: 'DELETE' });
   },
 };

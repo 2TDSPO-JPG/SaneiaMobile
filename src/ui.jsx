@@ -43,10 +43,15 @@ function Nav() {
   const router = useRouter();
   const pathname = usePathname();
   const { session } = useSession();
+  const role = session?.user.role;
+  const adminEntries = [['Equipamentos', 'activity', '/equipamentos'], ['Usuários', 'users', '/usuarios']];
+  const operationEntries = [
+    ...(role === 'operator' ? [['Mapa', 'map', '/mapa']] : []),
+    ['Relatos', 'file-text', '/relatos'],
+  ];
   const entries = [
     ['Início', 'home', '/inicio'],
-    ...(session?.user.role === 'operator' ? [['Mapa', 'map', '/mapa']] : []),
-    ['Relatos', 'file-text', '/relatos'],
+    ...(role === 'admin' ? adminEntries : operationEntries),
     ['Perfil', 'user', '/perfil'],
   ];
   return (
