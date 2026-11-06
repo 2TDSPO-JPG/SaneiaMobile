@@ -18,8 +18,12 @@ function AuthForm({ signup }) {
 
   async function submit() {
     setError('');
-    if ((signup && name.trim().length < 2) || !/^\S+@\S+\.\S+$/.test(email.trim()) || password.length < 8) {
-      setError('Confira os campos. Informe um e-mail válido e uma senha com ao menos 8 caracteres.');
+    if (!/^\S+@\S+\.\S+$/.test(email.trim()) || !password.trim()) {
+      setError('Informe um e-mail válido e a senha.');
+      return;
+    }
+    if (signup && (name.trim().length < 2 || password.length < 8)) {
+      setError('Informe um nome com pelo menos 2 caracteres e uma senha com pelo menos 8.');
       return;
     }
     setBusy(true);
@@ -48,11 +52,12 @@ function AuthForm({ signup }) {
         title={signup ? 'Crie sua conta' : 'Entre na sua conta'}
         subtitle={signup ? 'Acompanhe seus protocolos em um só lugar.' : undefined} />
       <Card>
-        {signup && <Field label="Nome" value={name} onChangeText={setName} autoComplete="name" />}
+        {signup && <Field label="Nome" value={name} onChangeText={setName} autoComplete="name" maxLength={120} />}
         <Field label="E-mail" value={email} onChangeText={setEmail} autoCapitalize="none"
-          keyboardType="email-address" autoComplete="email" placeholder="nome@exemplo.com" />
+          keyboardType="email-address" autoComplete="email" placeholder="nome@exemplo.com" maxLength={160} />
         <Field label="Senha" value={password} onChangeText={setPassword} secureTextEntry
-          autoComplete={signup ? 'new-password' : 'current-password'} placeholder="Mínimo de 8 caracteres" />
+          autoComplete={signup ? 'new-password' : 'current-password'} maxLength={100}
+          placeholder={signup ? 'Mínimo de 8 caracteres' : undefined} />
         <Notice error text={error} />
         <Button title={signup ? 'Criar conta' : 'Entrar'} icon="log-in" busy={busy} onPress={submit} />
         {!signup && !demoMode && <Button secondary title="Criar conta de morador" onPress={() => router.push('/cadastro')} />}

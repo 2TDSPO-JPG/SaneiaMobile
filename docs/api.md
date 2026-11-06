@@ -1,6 +1,6 @@
 # Contrato das APIs Java e .NET
 
-As rotas abaixo são relativas à base de cada serviço. O Java autentica e emite a sessão. As duas APIs recebem `Authorization: Bearer <token>` e validam autenticação e papel. O Java também verifica a propriedade dos relatos. Erros retornam JSON com `message`. O mobile ainda usa uma base única no modo integrado, conforme a seção de configuração do [README](../README.md).
+As rotas abaixo são relativas à base de cada serviço. O Java autentica e emite a sessão. As APIs recebem `Authorization: Bearer <token>` nas rotas protegidas e validam autenticação e papel. O Java também verifica a propriedade dos relatos. Erros retornam JSON com `message`. O app já usa a base Java e consulta o catálogo pelo Java até a configuração da segunda base, conforme o [README](../README.md).
 
 ## Java — rotas para o mobile
 
@@ -23,6 +23,8 @@ As rotas abaixo são relativas à base de cada serviço. O Java autentica e emit
 | POST /admin/sensors | SensorInput | Sensor criado |
 | PATCH /admin/sensors/{id} | SensorInput | Sensor atualizado |
 | DELETE /admin/sensors/{id} | — | 204 sem corpo |
+
+As listas paginadas do Java retornam arrays JSON, recebem `page` e `size` e informam o total de páginas no cabeçalho `X-Total-Pages`. O backend expõe esse cabeçalho via CORS.
 
 ## .NET — rotas para o mobile
 
@@ -64,6 +66,8 @@ As rotas `/admin/*` exigem o papel `admin` validado no Spring Boot. Retorne 401 
 **SensorInput** contém `prefix`, `name`, `equipmentType`, `address`, `neighborhood`, `postalAddress`, `coordinate: { latitude, longitude }`, `capacity`, `limit` e `radiusMeters`. O prefixo tem de 2 a 30 caracteres e deve ser único sem distinção de maiúsculas e minúsculas. Use 409 com `message` para prefixo duplicado. A capacidade e o limite são em litros, com `0 < limit <= capacity`. O raio é positivo e medido em metros. Latitude e longitude são números nos intervalos de -90 a 90 e -180 a 180, respectivamente.
 
 **PostalAddress** contém `cep` (texto de oito dígitos, preservando zeros iniciais), `street`, `number` (texto, aceita `S/N`), `neighborhood`, `city`, `state` (UF com duas letras) e `complement` (texto ou `null`). Exija o objeto na criação e na alteração de endereço. Edições de equipamentos legados podem preservar o endereço livre existente enquanto `postalAddress` estiver ausente. `address` continua sendo o endereço formatado para exibição, e `neighborhood` continua disponível no nível principal para os filtros. Inclua os três campos nas respostas do catálogo administrativo e do monitoramento. O app consulta a BrasilAPI para endereço e coordenadas aproximadas e usa o ViaCEP como alternativa para o endereço. O app envia as coordenadas em `coordinate`, seja pela busca do CEP, pelo GPS ou pelo ajuste manual.
+
+Na versão atual do Java, `SensorInput` e `SensorResponse` ainda não incluem `postalAddress`. O cliente Java envia o endereço formatado em `address` (até 200 caracteres), mais `neighborhood` e `coordinate`. Quando o backend passar a salvar e devolver o objeto, o cliente deve voltar a enviá-lo para que o formulário de edição recupere cada campo.
 
 A operadora usa `GET /reports` no Java e `GET /sensors` no .NET para pesquisar endereços, bairros, cidades e CEPs na lista e na tela do bairro. O app vincula as informações pelo `sensorId` do relato. Endereços de relatos sem equipamento continuam pesquisáveis pelo texto informado pelo morador.
 

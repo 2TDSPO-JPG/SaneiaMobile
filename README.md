@@ -29,7 +29,7 @@ O Saneia recebe relatos de saneamento dos moradores, organiza o atendimento da o
 - **Um catálogo.** O .NET lê os equipamentos ativos do Java. No Oracle, o Java grava contas, catálogo e relatos. O .NET grava leituras e eventos vinculados ao ID do Java. Quando um equipamento é retirado, sai do mapa e da cobertura, e o histórico permanece.
 - **Dois fluxos independentes.** Cadastro, cobertura e atendimento continuam disponíveis quando a telemetria estiver indisponível. Um alarme do equipamento gera um evento no .NET. O status do protocolo é atualizado pela operadora no Java.
 
-O [contrato das APIs](docs/api.md) detalha rotas, campos e erros. Confiram os endpoints do Java existente pelo Swagger ou pelo código do backend antes de ligar o mobile às duas bases.
+O [contrato das APIs](docs/api.md) detalha rotas, campos e erros. A integração atual usa o [backend Java do Saneia](https://github.com/2TDSPO-JPG/API-Java-Global-Solutions) como referência.
 
 ## Regras que o Java precisa aplicar
 
@@ -47,15 +47,22 @@ As listas são retornadas como arrays JSON. Os erros usam `{ "message": "..." }`
 2. **.NET.** Com a mesma sessão de operadora, verificar se o equipamento cadastrado no Java aparece no mapa e se a ficha exibe as leituras de teste. Na aba **Relatos por bairro**, verificar o endereço do equipamento pelo `sensorId` do relato.
 3. **IoT e IA.** Depois de validar as duas APIs por HTTP, publicar uma leitura no HiveMQ, verificar se ela entra no histórico e aparece no app e, por último, gerar o insight do período.
 
-### Configuração atual do mobile
+### Testar o Java com o app
 
-O [cliente HTTP atual](src/services/api.js) usa `EXPO_PUBLIC_API_URL` para o Java e ainda encaminha as rotas de monitoramento para essa mesma base quando está integrado. A próxima alteração no mobile será adicionar uma base própria para o .NET e encaminhar `/sensors` e insights para ela. `EXPO_PUBLIC_IOT_URL` pertence à ponte da demonstração local.
+1. No repositório Java, rode `.\mvnw.cmd spring-boot:run` no Windows. O perfil `local` usa H2 em memória e provisiona as três contas de teste abaixo. A API inicia por padrão em `http://localhost:8080/api`, com Swagger em `/api/swagger-ui.html`.
+2. No mobile, use Node.js 22.13 ou superior e execute `npm ci`. Crie `.env.local` a partir do [.env.example](.env.example) e configure `EXPO_PUBLIC_API_URL=http://localhost:8080/api`. Para testar no celular, troque `localhost` pelo IP do computador na rede local. Na nuvem, use a URL HTTPS real da API com o sufixo `/api`.
+3. Rode `npx expo start`, pressione **w** e entre com uma conta da API. Reinicie o Expo após alterar a URL. Se restringir o CORS do Java, inclua a origem do Expo e exponha o cabeçalho `X-Total-Pages`.
 
-Para testar o Java com o app atual, use Node.js 22.13 ou superior, execute `npm ci` e configure `EXPO_PUBLIC_API_URL=http://localhost:8080/api` em `.env.local`, conforme o [.env.example](.env.example). Rode `npx expo start` e pressione **w**. Configure o CORS da API para a origem do Expo, incluindo `Authorization`, `Content-Type` e o preflight `OPTIONS`. No celular, use o IP do computador na rede local. Reinicie o Expo ao alterar a URL.
+O [cliente HTTP](src/services/api.js) usa o JWT do Java, percorre as páginas das listas e envia fotos de relatos e complementos via multipart. O app lê `GET /sensors` e `GET /sensors/{id}` do Java provisoriamente para manter o catálogo, os endereços e a ficha acessíveis. A segunda base HTTP, os insights no modo integrado e a ingestão IoT ficam para a etapa .NET. `EXPO_PUBLIC_IOT_URL` pertence à ponte da demonstração local.
+
+### Ajustes pendentes no backend
+
+- **Endereço estruturado do equipamento.** O Java atual aceita e devolve `address`, `neighborhood` e `coordinate`. Para reabrir o formulário com CEP, número, cidade e UF preenchidos, adicione `postalAddress` às entradas de `POST /admin/sensors` e `PATCH /admin/sensors/{id}`, salve o objeto e devolva-o nas consultas do catálogo. Enquanto isso, o app envia o endereço completo formatado, limitado aos 200 caracteres do DTO Java.
+- **Login compartilhado com o .NET.** Antes da segunda API, alinhe a validação do JWT. O Java atual usa HS256. A opção descrita no contrato é um endpoint interno de validação no Java. Esse ajuste pertence à etapa .NET.
 
 ## Consultar o fluxo local
 
-Para conhecer as telas antes de implementar a API, deixe `EXPO_PUBLIC_API_URL` e `EXPO_PUBLIC_IOT_URL` vazias. Rode `npx expo start` e pressione **w**. Estas contas pertencem ao modo local.
+Para conhecer as telas com AsyncStorage, deixe `EXPO_PUBLIC_API_URL` e `EXPO_PUBLIC_IOT_URL` vazias. Rode `npx expo start` e pressione **w**. Estas contas também são provisionadas pelo perfil `local` do Java.
 
 | Perfil | E-mail | Senha |
 | --- | --- | --- |

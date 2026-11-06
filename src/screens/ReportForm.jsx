@@ -106,7 +106,9 @@ function ReportFields({ initial, reports }) {
         category, description: description.trim(), address: address.trim(),
         neighborhood: neighborhood.trim().replace(/\s+/g, ' '), coordinate, photo,
       }, initial.id);
-      router.replace({ pathname: '/relato/[id]', params: { id: report.id, saved: '1' } });
+      const detail = { pathname: '/relato/[id]', params: { id: report.id, saved: '1' } };
+      if (initial.id) router.dismissTo(detail);
+      else router.replace(detail);
     } catch (failure) {
       setError(errorText(failure));
       if (failure.code === 'REPORT_COOLDOWN') setConflictId(failure.existingReportId);

@@ -90,6 +90,7 @@ function equipmentInput(fields, sensor) {
   if (!/^[A-Z0-9][A-Z0-9_-]{1,29}$/.test(prefix)) throw new Error('Use de 2 a 30 letras, números, hífens ou sublinhados no prefixo.');
   if (!name || !equipmentType) throw new Error('Preencha nome e tipo do equipamento.');
   const address = equipmentAddress(fields, sensor);
+  if (!demoMode && address.address.length > 200) throw new Error('O endereço completo deve ter até 200 caracteres.');
   const coordinate = readCoordinate(fields);
   if (!coordinate) {
     throw new Error('Defina a localização do equipamento pelo CEP, pela sua localização ou pelo ajuste manual.');

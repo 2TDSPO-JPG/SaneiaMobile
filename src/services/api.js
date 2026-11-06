@@ -17,7 +17,7 @@ export const demoSession = (role) => ({ token: 'demo', user: demoUsers.find((use
 // A ponte Wokwi atual publica apenas o equipamento S07.
 const bridgeSensorId = 'S07';
 
-async function request(path, { token, method = 'GET', body, apiUrl = baseUrl } = {}) {
+async function request(path, { token, method = 'GET', body, apiUrl = baseUrl, paged = false } = {}) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 15000);
   try {
@@ -43,7 +43,7 @@ async function request(path, { token, method = 'GET', body, apiUrl = baseUrl } =
       throw error;
     }
     if (data === null) throw new Error('A API retornou uma resposta inválida.');
-    return data;
+    return paged ? { data, totalPages: Number(response.headers.get('X-Total-Pages')) } : data;
   } catch (error) {
     if (error.name === 'AbortError') throw new Error('A conexão demorou demais. Tente novamente.');
     if (error instanceof TypeError) throw new Error('Não foi possível conectar à API. Verifique a rede e tente novamente.');
@@ -51,6 +51,20 @@ async function request(path, { token, method = 'GET', body, apiUrl = baseUrl } =
   } finally {
     clearTimeout(timeout);
   }
+}
+
+async function javaList(path, session) {
+  const items = new Map();
+  let page = 0;
+  let totalPages;
+  do {
+    const result = await request(`${path}?page=${page}&size=200`, { token: session.token, paged: true });
+    if (!Array.isArray(result.data)) throw new Error('A API retornou uma lista inválida.');
+    for (const item of result.data) items.set(item.id, item);
+    totalPages = result.totalPages;
+    page += 1;
+  } while (Number.isInteger(totalPages) && page < totalPages);
+  return [...items.values()];
 }
 
 const pathFor = (id) => `/reports/${encodeURIComponent(id)}`;
@@ -119,7 +133,7 @@ export const api = {
     return { sensorId: sensor?.id ?? null, status: sensor?.status ?? null };
   },
   async listReports(session) {
-    return demoMode ? visibleReports(await readDemo(), session) : request('/reports', session);
+    return demoMode ? visibleReports(await readDemo(), session) : javaList('/reports', session);
   },
   async report(session, id) {
     if (!demoMode) return request(pathFor(id), session);
@@ -219,7 +233,7 @@ export const api = {
     });
   },
   async sensors(session) {
-    if (!demoMode) return request('/sensors', session);
+    if (!demoMode) return javaList('/sensors', session);
     const sensors = await localEquipment();
     if (!liveIotDemo || !sensors.some((sensor) => sensor.id === bridgeSensorId)) return sensors;
     const live = await iotRequest('/sensors');
@@ -228,10 +242,10 @@ export const api = {
       return telemetry ? withTelemetry(sensor, telemetry) : sensor;
     });
   },
-  sensorInsights(session, id, range) {
+  async sensorInsights(id, range) {
     const path = `/sensors/${encodeURIComponent(id)}/insights`;
     if (liveIotDemo) return iotRequest(path, { method: 'POST', body: range });
-    return request(path, { token: session.token, method: 'POST', body: range });
+    throw new Error('Os insights serão disponibilizados pela API .NET.');
   },
   async sensor(session, id) {
     const path = `/sensors/${encodeURIComponent(id)}`;
@@ -241,11 +255,11 @@ export const api = {
   },
   async adminUsers(session) {
     requireAdmin(session);
-    return demoMode ? demoUsers : request('/admin/users', session);
+    return demoMode ? demoUsers : javaList('/admin/users', session);
   },
   async adminEquipment(session) {
     requireAdmin(session);
-    return demoMode ? localEquipment() : request(adminSensorPath(), session);
+    return demoMode ? localEquipment() : javaList(adminSensorPath(), session);
   },
   async adminSensor(session, id) {
     requireAdmin(session);
@@ -254,7 +268,9 @@ export const api = {
   async saveEquipment(session, input, id) {
     requireAdmin(session);
     if (demoMode) return saveLocalEquipment(input, id);
-    return request(adminSensorPath(id), { token: session.token, method: id ? 'PATCH' : 'POST', body: input });
+    const javaInput = { ...input };
+    delete javaInput.postalAddress;
+    return request(adminSensorPath(id), { token: session.token, method: id ? 'PATCH' : 'POST', body: javaInput });
   },
   async deleteEquipment(session, id) {
     requireAdmin(session);
