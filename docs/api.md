@@ -1,6 +1,8 @@
-# Contrato inicial com o Spring Boot
+# Contrato das APIs Java e .NET
 
-O prefixo da API pode fazer parte de `EXPO_PUBLIC_API_URL` (por exemplo, `http://192.168.1.20:8080/api`). Rotas protegidas recebem `Authorization: Bearer <token>`. O servidor valida autenticação, papel e propriedade. Erros retornam JSON com `message`.
+As rotas abaixo são relativas à base de cada serviço. O Java autentica e emite a sessão. As duas APIs recebem `Authorization: Bearer <token>` e validam autenticação e papel. O Java também verifica a propriedade dos relatos. Erros retornam JSON com `message`. O mobile ainda usa uma base única no modo integrado, conforme a seção de configuração do [README](../README.md).
+
+## Java — rotas para o mobile
 
 | Método e rota | Entrada | Saída |
 | --- | --- | --- |
@@ -14,10 +16,7 @@ O prefixo da API pode fazer parte de `EXPO_PUBLIC_API_URL` (por exemplo, `http:/
 | PATCH /reports/{id}/status | status, resolution, progressNote | Report atualizado |
 | POST /reports/{id}/updates | note e/ou photo | Report atualizado com o complemento |
 | POST /reports/{id}/assessment | note | Report atualizado com assessment |
-| GET /coverage?latitude=…&longitude=… | Coordenadas | { sensorId, status } ou ambos null |
-| GET /sensors | — | Sensor[] |
-| GET /sensors/{id} | — | Sensor |
-| POST /sensors/{id}/insights | period, from, to | { summary } com análise textual |
+| GET /coverage?latitude=…&longitude=… | Coordenadas | { sensorId, status }. Sem cobertura, ambos null. Com cobertura e sem estado disponível, status pode ser null. |
 | GET /admin/users | — | User[] com id, name, email e role |
 | GET /admin/sensors | — | Sensor[] com os equipamentos ativos |
 | GET /admin/sensors/{id} | — | Sensor |
@@ -25,12 +24,30 @@ O prefixo da API pode fazer parte de `EXPO_PUBLIC_API_URL` (por exemplo, `http:/
 | PATCH /admin/sensors/{id} | SensorInput | Sensor atualizado |
 | DELETE /admin/sensors/{id} | — | 204 sem corpo |
 
+## .NET — rotas para o mobile
+
+| Método e rota | Entrada | Saída |
+| --- | --- | --- |
+| GET /sensors | — | Sensor[] com os equipamentos ativos, para o mapa |
+| GET /sensors/{id} | — | Sensor com histórico, para a ficha do equipamento |
+| POST /sensors/{id}/insights | period, from, to | { summary } com análise textual, na etapa de IoT e IA |
+
+O monitoramento exige o papel `operator`. O .NET monta as respostas com dados do catálogo Java e da telemetria no Oracle. Para as consultas iniciais, use medições de teste. Para um equipamento recém-cadastrado, retorne `status: "offline"`, `volume: null`, `lastReadingAt: null` e histórico vazio.
+
+### Comunicação entre as APIs
+
+- Se o Java emite JWT com assinatura assimétrica, configure o .NET para verificar a assinatura com a chave pública do Java e validar emissor, audiência, expiração e papel. Alinhe uma audiência aceita pelas duas APIs. Para token opaco ou assinado com segredo simétrico, use um endpoint interno de validação no Java que devolva a identidade e o papel de uma sessão ativa. A aplicação faz um único login.
+- Para ler o catálogo, o .NET pode reaproveitar `GET /sensors` e `GET /sensors/{id}` na base do Java, se essas rotas já existirem. A consulta iniciada pela operadora pode encaminhar o token da sessão. A ingestão MQTT, em etapa posterior, usa credencial de serviço para consultar o catálogo. O mesmo `id` do catálogo identifica o equipamento no monitoramento e no vínculo do relato.
+- O Java é responsável pelas tabelas de usuários, equipamentos e relatos. O .NET é responsável pelas tabelas de medições e eventos. No IoT, identifique o dispositivo no catálogo e grave cada `sampleId` uma vez por dispositivo. A retirada de um equipamento afeta as consultas ao catálogo ativo e preserva o histórico.
+
+## Formatos e regras de negócio
+
 - **Session** contém `token` e `user: { id, name, email, role }`, com papel `resident`, `operator` ou `admin`.
 - **ReportInput** contém `category`, `description`, `address`, `neighborhood` e `coordinate: { latitude, longitude }`. O app usa JSON sem foto. Com foto, usa multipart com a parte textual `report` contendo o JSON e a parte binária `photo`. Em edição, a ausência de uma nova foto mantém a anterior.
 - **Report** contém os campos de ReportInput mais `id`, `protocol`, `status`, `createdAt`, `photoUrl`, `sensorId` e `resolution`. As três últimas propriedades aceitam null. A foto deve usar URL acessível ao destinatário autorizado, por exemplo, URL assinada.
 - **Sensor** inclui `id`, `prefix`, `name`, `address`, `neighborhood`, `coordinate`, `status`, `capacity`, `limit`, `volume`, `lastReadingAt`, `etaHours`, `alarmsSixMonths` e `readings`. `summary`, `reason` e `events: [{ id, status, at, message }]` são opcionais. Volumes são em litros, datas em ISO 8601 e `readings` é uma lista de volumes em ordem cronológica. Estados: `normal` (OK), `warning` (alerta), `alarm` (limite atingido) e `offline`.
 - **Ficha do equipamento** pode incluir `equipmentType`, `source`, `expectedIntervalMinutes` e `radiusMeters`. Para abrir o detalhe de cada barra, prefira `samples: [{ id, at, volume, levelCm, status, capacity, limit, source, note }]`. Cada amostra tem identificador, horário ISO 8601 e volume. Nível em centímetros, estado naquele momento, capacidade e limite vigentes na leitura, origem e observação são opcionais. Com apenas `readings`, o app mostra os volumes e as variações sem atribuir datas ou estados históricos.
-- **Insights** usam `period` (`today`, `7d`, `30d`, `90d` ou `all`) e limites inclusivos em ISO 8601. O filtro Hoje começa à meia-noite no fuso do dispositivo. Para `all`, `from` é omitido. O Spring Boot deve autorizar o acesso ao equipamento, buscar as medições no Oracle, calcular os indicadores e usar o LLM para resumir esses dados e suas limitações. O modelo não define alarmes nem substitui as medições. O app não envia uma chave de IA nem solicita IA no modo demonstração.
+- **Insights** usam `period` (`today`, `7d`, `30d`, `90d` ou `all`) e limites inclusivos em ISO 8601. O filtro Hoje começa à meia-noite no fuso do dispositivo. Para `all`, `from` é omitido. O .NET autoriza o acesso ao equipamento, busca as medições no Oracle, calcula os indicadores e envia ao Gemini apenas os dados agregados do período. A chave fica no servidor e o cálculo dos alarmes usa as regras da telemetria. A demonstração local pode usar a ponte IoT para gerar a análise.
 
 O morador edita ou exclui apenas os próprios relatos em `received`. A operadora avança para `in_progress` e encerra com `closed` e um desfecho. A mudança do estado do sensor não encerra protocolos. A cobertura por raio indica um sensor candidato e o vínculo final pode ser revisado pela operadora em uma próxima etapa.
 
@@ -48,6 +65,6 @@ As rotas `/admin/*` exigem o papel `admin` validado no Spring Boot. Retorne 401 
 
 **PostalAddress** contém `cep` (texto de oito dígitos, preservando zeros iniciais), `street`, `number` (texto, aceita `S/N`), `neighborhood`, `city`, `state` (UF com duas letras) e `complement` (texto ou `null`). Exija o objeto na criação e na alteração de endereço. Edições de equipamentos legados podem preservar o endereço livre existente enquanto `postalAddress` estiver ausente. `address` continua sendo o endereço formatado para exibição, e `neighborhood` continua disponível no nível principal para os filtros. Inclua os três campos nas respostas do catálogo administrativo e do monitoramento. O app consulta a BrasilAPI para endereço e coordenadas aproximadas e usa o ViaCEP como alternativa para o endereço. O app envia as coordenadas em `coordinate`, seja pela busca do CEP, pelo GPS ou pelo ajuste manual.
 
-A operadora usa `GET /reports` e `GET /sensors` para pesquisar endereços, bairros, cidades e CEPs na lista e na tela do bairro. O app vincula as informações pelo `sensorId` do relato. Endereços de relatos sem equipamento continuam pesquisáveis pelo texto informado pelo morador.
+A operadora usa `GET /reports` no Java e `GET /sensors` no .NET para pesquisar endereços, bairros, cidades e CEPs na lista e na tela do bairro. O app vincula as informações pelo `sensorId` do relato. Endereços de relatos sem equipamento continuam pesquisáveis pelo texto informado pelo morador.
 
-O servidor gera um `id` estável, mantém as leituras e inicia um novo equipamento em `offline` até a primeira medição. A edição atualiza apenas os campos do catálogo. A exclusão retira o equipamento do catálogo, do mapa e da busca de cobertura, preservando as leituras e o vínculo de protocolos existentes. As rotas de monitoramento da operadora consultam o mesmo catálogo ativo.
+O Java gera um `id` estável e a edição atualiza apenas os campos do catálogo. A exclusão retira o equipamento do catálogo, do mapa e da busca de cobertura, preservando as leituras e o vínculo de protocolos existentes. O .NET consulta o mesmo catálogo ativo para exibir o monitoramento da operadora.
