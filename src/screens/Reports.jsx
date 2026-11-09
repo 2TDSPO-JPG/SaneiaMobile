@@ -122,7 +122,7 @@ export function ReportDetailScreen() {
   const { id, saved, complement } = useLocalSearchParams();
   const load = useCallback((session) => api.report(session, id), [id]);
   const state = useResource(load);
-  return <Screen back>
+  return <Screen back narrow>
     <Resource state={state}>{(report) => <Details key={report.id} report={report} state={state}
       saved={saved === '1'} complement={complement === '1'} />}</Resource>
   </Screen>;

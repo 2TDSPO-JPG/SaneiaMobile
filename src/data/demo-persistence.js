@@ -1,5 +1,4 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { demoReports } from './demo';
 import { readLegacyDemo } from './demo-storage';
 
 const storageKey = 'saneia-demo-v3';
@@ -8,7 +7,7 @@ let pendingWrite = Promise.resolve();
 export async function readDemo() {
   const saved = await AsyncStorage.getItem(storageKey);
   return saved === null
-    ? readLegacyDemo() ?? { reports: demoReports, sequence: 2 }
+    ? readLegacyDemo() ?? { reports: [], sensors: [], sequence: 0 }
     : JSON.parse(saved);
 }
 

@@ -5,7 +5,7 @@ import { deleteLocalEquipment, localEquipment, localSensor, saveLocalEquipment }
 const baseUrl = process.env.EXPO_PUBLIC_API_URL?.trim().replace(/\/+$/, '');
 const iotUrl = process.env.EXPO_PUBLIC_IOT_URL?.trim().replace(/\/+$/, '');
 const iotToken = process.env.EXPO_PUBLIC_IOT_DEMO_TOKEN?.trim();
-export const demoMode = !baseUrl;
+export const demoMode = !baseUrl && process.env.EXPO_PUBLIC_LOCAL_MODE === 'true';
 export const liveIotDemo = demoMode && Boolean(iotUrl);
 const demoUsers = [
   { id: 'demo-resident', name: 'Morador', email: 'morador@saneia.test', role: 'resident' },
@@ -18,6 +18,7 @@ export const demoSession = (role) => ({ token: 'demo', user: demoUsers.find((use
 const bridgeSensorId = 'S07';
 
 async function request(path, { token, method = 'GET', body, apiUrl = baseUrl, paged = false } = {}) {
+  if (!apiUrl) throw new Error('O serviço está indisponível. Entre em contato com a equipe responsável.');
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 15000);
   try {
@@ -202,7 +203,7 @@ export const api = {
       const detail = note.trim();
       if ((!detail && !photo) || detail.length > 600) throw new Error('Inclua uma foto ou descreva a atualização em até 600 caracteres.');
       if (photo && (!photo.base64 || photo.base64.length > 2_000_000)) {
-        throw new Error('A foto é grande demais para salvar na demonstração. Selecione uma foto menor ou envie um texto.');
+        throw new Error('A foto é grande demais. Selecione uma foto menor ou envie um texto.');
       }
       const updates = report.updates || [];
       const update = {
@@ -242,10 +243,11 @@ export const api = {
       return telemetry ? withTelemetry(sensor, telemetry) : sensor;
     });
   },
-  async sensorInsights(id, range) {
+  async sensorInsights(session, id, range) {
     const path = `/sensors/${encodeURIComponent(id)}/insights`;
     if (liveIotDemo) return iotRequest(path, { method: 'POST', body: range });
-    throw new Error('Os insights serão disponibilizados pela API .NET.');
+    if (!demoMode) return request(path, { token: session.token, method: 'POST', body: range });
+    throw new Error('A análise está indisponível para este equipamento.');
   },
   async sensor(session, id) {
     const path = `/sensors/${encodeURIComponent(id)}`;

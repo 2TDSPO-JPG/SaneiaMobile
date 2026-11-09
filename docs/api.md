@@ -32,9 +32,12 @@ As listas paginadas do Java retornam arrays JSON, recebem `page` e `size` e info
 | --- | --- | --- |
 | GET /sensors | — | Sensor[] com os equipamentos ativos, para o mapa |
 | GET /sensors/{id} | — | Sensor com histórico, para a ficha do equipamento |
-| POST /sensors/{id}/insights | period, from, to | { summary } com análise textual, na etapa de IoT e IA |
 
 O monitoramento exige o papel `operator`. O .NET monta as respostas com dados do catálogo Java e da telemetria no Oracle. Para as consultas iniciais, use medições de teste. Para um equipamento recém-cadastrado, retorne `status: "offline"`, `volume: null`, `lastReadingAt: null` e histórico vazio.
+
+### Análise com Spring AI no Java
+
+`POST /sensors/{id}/insights` é consumido na base Java com o mesmo token da operadora e recebe `period`, `from` e `to`. Retorna `summary`, `aiGenerated` e os indicadores calculados. A funcionalidade Spring AI integra o fluxo da solução exigido em Java Advanced. Quando a telemetria passar ao .NET, as equipes devem alinhar como o Java obterá as medições para manter essa análise.
 
 ### Comunicação entre as APIs
 
@@ -49,7 +52,7 @@ O monitoramento exige o papel `operator`. O .NET monta as respostas com dados do
 - **Report** contém os campos de ReportInput mais `id`, `protocol`, `status`, `createdAt`, `photoUrl`, `sensorId` e `resolution`. As três últimas propriedades aceitam null. A foto deve usar URL acessível ao destinatário autorizado, por exemplo, URL assinada.
 - **Sensor** inclui `id`, `prefix`, `name`, `address`, `neighborhood`, `coordinate`, `status`, `capacity`, `limit`, `volume`, `lastReadingAt`, `etaHours`, `alarmsSixMonths` e `readings`. `summary`, `reason` e `events: [{ id, status, at, message }]` são opcionais. Volumes são em litros, datas em ISO 8601 e `readings` é uma lista de volumes em ordem cronológica. Estados: `normal` (OK), `warning` (alerta), `alarm` (limite atingido) e `offline`.
 - **Ficha do equipamento** pode incluir `equipmentType`, `source`, `expectedIntervalMinutes` e `radiusMeters`. Para abrir o detalhe de cada barra, prefira `samples: [{ id, at, volume, levelCm, status, capacity, limit, source, note }]`. Cada amostra tem identificador, horário ISO 8601 e volume. Nível em centímetros, estado naquele momento, capacidade e limite vigentes na leitura, origem e observação são opcionais. Com apenas `readings`, o app mostra os volumes e as variações sem atribuir datas ou estados históricos.
-- **Insights** usam `period` (`today`, `7d`, `30d`, `90d` ou `all`) e limites inclusivos em ISO 8601. O filtro Hoje começa à meia-noite no fuso do dispositivo. Para `all`, `from` é omitido. O .NET autoriza o acesso ao equipamento, busca as medições no Oracle, calcula os indicadores e envia ao Gemini apenas os dados agregados do período. A chave fica no servidor e o cálculo dos alarmes usa as regras da telemetria. A demonstração local pode usar a ponte IoT para gerar a análise.
+- **Insights** usam `period` (`today`, `7d`, `30d`, `90d` ou `all`) e limites inclusivos em ISO 8601. O filtro Hoje começa à meia-noite no fuso do dispositivo. Para `all`, `from` é omitido. O Java autoriza o acesso ao equipamento, calcula os indicadores e usa Spring AI com Gemini. A chave fica no servidor. Os estados do equipamento seguem as regras da telemetria.
 
 O morador edita ou exclui apenas os próprios relatos em `received`. A operadora avança para `in_progress` e encerra com `closed` e um desfecho. A mudança do estado do sensor não encerra protocolos. A cobertura por raio indica um sensor candidato e o vínculo final pode ser revisado pela operadora em uma próxima etapa.
 

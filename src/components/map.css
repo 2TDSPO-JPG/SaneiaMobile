@@ -1,0 +1,14 @@
+.saneia-map-marker { background: transparent; border: 0; }
+.saneia-map-label {
+  display: flex; align-items: center; justify-content: center; gap: 7px;
+  box-sizing: border-box; height: 30px; padding: 0 10px;
+  border: 1px solid #bccdc2; border-radius: 6px; background: #fff;
+  color: #192e2b; font: 600 11px system-ui, sans-serif;
+  box-shadow: 0 2px 5px #1733261a; white-space: nowrap;
+}
+.saneia-map-signal { display: inline-flex; align-items: center; justify-content: center; min-width: 16px; height: 16px; border-radius: 4px; font-weight: 800; }
+.saneia-map-signal.alarm { color: #b34438; background: #fbefec; }
+.saneia-map-signal.warning { color: #93631b; background: #fcf4e4; }
+.saneia-map-signal.offline { color: #63716c; background: #edf0ee; }
+.saneia-map-marker:focus-visible .saneia-map-label { outline: 2px solid #17694f; outline-offset: 3px; }
+.leaflet-container { font-family: system-ui, sans-serif; background: #edf0ee; }

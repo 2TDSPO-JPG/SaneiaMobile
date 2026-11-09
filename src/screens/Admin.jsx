@@ -1,25 +1,36 @@
 import * as Location from 'expo-location';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { Text } from 'react-native';
+import { Text, View } from 'react-native';
 import { EquipmentFilters, filterEquipment, Filters } from '../components/Operations';
-import { demoCenter } from '../data/demo';
-import { api, demoMode, liveIotDemo } from '../services/api';
+import { api, demoMode } from '../services/api';
 import { equipmentAddress, lookupCep } from '../services/postal-address';
 import { useErrorText, useSession } from '../session';
 import { equipmentStatus, roleLabels, sensorStatus } from '../theme';
 import { useResource } from '../use-resource';
-import { Badge, Body, Button, Card, Field, Heading, ListItem, Notice, Resource, Screen, styles } from '../ui';
+import { Badge, Body, Button, Card, EmptyState, Field, Heading, ListItem, Metric, Notice, Resource, Screen, styles } from '../ui';
 
 const roleFilters = [['all', 'Todos'], ...Object.entries(roleLabels)];
 
+async function loadAdminOverview(session) {
+  const [equipment, users] = await Promise.all([api.adminEquipment(session), api.adminUsers(session)]);
+  return { equipment, users };
+}
+
 export function AdminHomeScreen() {
   const router = useRouter();
+  const state = useResource(loadAdminOverview);
   return <Screen tabs>
-    <Heading kicker="Área administrativa" title="Administração"
-      subtitle="Gerencie os equipamentos e consulte as contas cadastradas." />
-    <ListItem title="Gerenciar equipamentos" description="Cadastre, edite ou retire equipamentos do catálogo."
-      icon="activity" onPress={() => router.push('/equipamentos')} />
+    <Heading kicker="Gestão" title="Administração" subtitle="Cadastros e acessos da operação." />
+    <Resource state={state}>{({ equipment, users }) => <View style={styles.metrics}>
+      <Metric label="Equipamentos cadastrados" value={equipment.length} icon="cpu" onPress={() => router.push('/equipamentos')} />
+      <Metric label="Usuários cadastrados" value={users.length} icon="users" onPress={() => router.push('/usuarios')} />
+    </View>}</Resource>
+    <Card><Text style={styles.section}>Catálogo de equipamentos</Text>
+      <Body>Cadastre a instalação, o endereço e os limites operacionais de cada ponto.</Body>
+      <Button title="Cadastrar equipamento" icon="plus" onPress={() => router.push('/equipamento')} />
+      <Button secondary title="Gerenciar equipamentos" icon="cpu" onPress={() => router.push('/equipamentos')} />
+    </Card>
     <ListItem title="Ver usuários" description="Consulte os moradores, as operadoras e os administradores."
       icon="users" onPress={() => router.push('/usuarios')} />
   </Screen>;
@@ -37,7 +48,7 @@ export function AdminUsersScreen() {
         <Text style={styles.section}>{user.name}</Text>
         <Body>{user.email}</Body>
         <Badge label={roleLabels[user.role] || 'Perfil desconhecido'} />
-      </Card>) : <Notice text="Nenhum usuário neste filtro." />;
+      </Card>) : <EmptyState icon="users" title="Nenhum usuário encontrado" description="Escolha outro perfil para consultar as contas cadastradas." />;
     }}</Resource>
   </Screen>;
 }
@@ -47,7 +58,7 @@ export function AdminEquipmentScreen() {
   const state = useResource(api.adminEquipment);
   const [status, setStatus] = useState('all');
   return <Screen tabs>
-    <Heading kicker="Administração" title="Equipamentos" subtitle="As alterações no catálogo aparecem na área da operadora." />
+    <Heading kicker="Administração" title="Equipamentos" subtitle="Endereços, capacidade e limites operacionais." />
     <Button title="Cadastrar equipamento" icon="plus" onPress={() => router.push('/equipamento')} />
     <EquipmentFilters value={status} onChange={setStatus} />
     <Resource state={state}>{(sensors) => {
@@ -57,7 +68,7 @@ export function AdminEquipmentScreen() {
         return <ListItem key={sensor.id} title={`${sensor.prefix} · ${sensor.name}`}
           description={sensor.address} icon="activity" badge={current?.label} tone={current?.tone}
           onPress={() => router.push({ pathname: '/equipamento', params: { id: sensor.id } })} />;
-      }) : <Notice text="Nenhum equipamento neste filtro." />;
+      }) : <EmptyState icon="cpu" title="Nenhum equipamento encontrado" description="Cadastre um equipamento ou selecione outro filtro." />;
     }}</Resource>
   </Screen>;
 }
@@ -66,7 +77,7 @@ export function AdminEquipmentFormScreen() {
   const { id } = useLocalSearchParams();
   const load = useCallback((session) => typeof id === 'string' ? api.adminSensor(session, id) : {}, [id]);
   const state = useResource(load);
-  return <Screen back>
+  return <Screen back narrow>
     <Heading kicker="Administração" title={id ? 'Editar equipamento' : 'Novo equipamento'} />
     <Resource state={state}>{(sensor) => <EquipmentForm key={sensor.id ?? 'new'} sensor={sensor} />}</Resource>
   </Screen>;
@@ -104,11 +115,7 @@ function equipmentInput(fields, sensor) {
   if (!(Number.isFinite(radiusMeters) && radiusMeters > 0)) throw new Error('Informe um raio de cobertura positivo.');
   const data = { prefix, name, ...address, equipmentType, coordinate, capacity, limit, radiusMeters };
   if (!demoMode) return data;
-  const simulatedVolume = fields.volume.trim() ? readNumber(fields.volume) : null;
-  if (simulatedVolume != null && !(simulatedVolume >= 0 && simulatedVolume <= capacity)) {
-    throw new Error('O volume simulado deve estar entre zero e a capacidade.');
-  }
-  return { ...data, simulatedVolume };
+  return { ...data, simulatedVolume: sensor.volume ?? null };
 }
 
 function EquipmentForm({ sensor }) {
@@ -130,7 +137,6 @@ function EquipmentForm({ sensor }) {
     ...(sensor.postalAddress && { ...sensor.postalAddress, complement: sensor.postalAddress.complement ?? '' }),
     latitude: String(sensor.coordinate?.latitude ?? ''), longitude: String(sensor.coordinate?.longitude ?? ''),
     capacity: String(sensor.capacity ?? ''), limit: String(sensor.limit ?? ''), radiusMeters: String(sensor.radiusMeters ?? 200),
-    volume: sensor.status === 'offline' ? '' : String(sensor.volume ?? ''),
   });
   const formBusy = busy || lookupBusy || locating;
   const currentCoordinate = readCoordinate(fields);
@@ -204,7 +210,7 @@ function EquipmentForm({ sensor }) {
     </Card>
     <Card>
       <Text style={styles.section}>Endereço do equipamento</Text>
-      {!!sensor.id && !sensor.postalAddress && <Notice text={`Endereço anterior: ${sensor.address}. Para atualizá-lo, preencha o endereço completo.`} />}
+      {!!sensor.id && !sensor.postalAddress && <Notice text={`Endereço atual: ${sensor.address}. Para alterar o endereço, preencha os campos abaixo.`} />}
       {field('cep', 'CEP', { keyboardType: 'number-pad', maxLength: 9, placeholder: '00000-000' })}
       <Button title="Buscar CEP" icon="search" secondary busy={lookupBusy} disabled={busy || locating || confirmDelete} onPress={searchCep} />
       <Notice error text={lookupError} />
@@ -228,18 +234,11 @@ function EquipmentForm({ sensor }) {
         {field('latitude', 'Latitude', decimal)}
         {field('longitude', 'Longitude', decimal)}
       </>}
-      {demoMode && <Button title="Usar coordenadas de exemplo" secondary disabled={formBusy}
-        onPress={() => applyCoordinate(demoCenter, 'example')} />}
     </Card>
     <Card>
       {field('capacity', 'Capacidade (L)', decimal)}
       {field('limit', 'Limite operacional (L)', decimal)}
       {field('radiusMeters', 'Raio de cobertura (m)', decimal)}
-      {demoMode && <>
-        {field('volume', 'Volume simulado (L)', decimal)}
-        <Body>Deixe vazio para simular falta de comunicação. O alerta começa em 85% do limite e o alarme começa no limite.</Body>
-      </>}
-      {liveIotDemo && sensor.id === 'S07' && <Notice text="Com a ponte IoT ativa, as leituras e os limites operacionais do S07 vêm da configuração da ponte." />}
     </Card>
     <Notice error text={error} />
     <Button title="Salvar equipamento" icon="save" busy={busy && !confirmDelete}

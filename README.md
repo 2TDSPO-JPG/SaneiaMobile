@@ -2,12 +2,20 @@
 
 O Saneia recebe relatos de saneamento dos moradores, organiza o atendimento da operadora e permite que a administração gerencie o catálogo de equipamentos. O app usa React Native, Expo SDK 58 e Expo Router, com AsyncStorage no modo local. A integração prevê duas APIs, **Java (Spring Boot)** e **.NET (ASP.NET Core)**, com persistência no Oracle.
 
+## Interface e acesso
+
+O fluxo principal usa autenticação na API Java. A página de acesso tem login e cadastro de morador. Cada perfil recebe sua própria navegação, com menu lateral em telas maiores e navegação inferior no celular.
+
+A visão geral mostra os totais retornados pela API, os equipamentos que precisam de atenção e os últimos relatos. O cadastro administrativo usa CEP para preencher endereço e localização. As coordenadas podem ser ajustadas, e o volume é recebido pelo monitoramento. O mapa web usa Leaflet com base OpenStreetMap e os mapas nativos continuam disponíveis no Android e no iOS. A base cartográfica e a busca de CEP exigem conexão com a internet.
+
+Para usar a API local com um catálogo vazio, configure `SEED_DEMO_DATA=false` no processo Java antes de iniciá-lo. Essa configuração mantém as contas provisionadas e permite cadastrar os equipamentos e relatos pelo aplicativo.
+
 ## Quem implementa o quê
 
 | API | Responsabilidade | Rotas consumidas pelo mobile após a integração |
 | --- | --- | --- |
 | **Java** | Contas e permissões, cadastro de equipamentos, cobertura geográfica e todo o atendimento dos moradores. | `POST /auth/login`, `POST /auth/signup`, `GET /admin/users`, CRUD em `/admin/sensors`, `GET /coverage` e rotas de `/reports` |
-| **.NET** | Monitoramento da operadora. Junta o catálogo do Java com o último estado, o volume, o histórico e os eventos de cada equipamento. Depois recebe as leituras do IoT e gera insights. | `GET /sensors`, `GET /sensors/{id}` e, na etapa de IoT e IA, `POST /sensors/{id}/insights` |
+| **.NET** | Monitoramento da operadora. Junta o catálogo do Java com o último estado, o volume, o histórico e os eventos de cada equipamento. Depois recebe as leituras do IoT. | `GET /sensors` e `GET /sensors/{id}`, quando a segunda base estiver integrada |
 
 ### Java — negócio e administração
 
@@ -21,7 +29,7 @@ O Saneia recebe relatos de saneamento dos moradores, organiza o atendimento da o
 1. Implementar `GET /sensors` para o mapa da operadora e `GET /sensors/{id}` para a ficha, unindo o cadastro lido do Java ao histórico no Oracle pelo `id` do equipamento.
 2. Testar com leituras fictícias gravadas no Oracle. Para equipamentos sem leituras, retornar `offline`, com `volume` e `lastReadingAt` nulos e listas de histórico vazias.
 3. Na etapa seguinte, receber as leituras do **Wokwi via HiveMQ**, associar o dispositivo ao equipamento cadastrado, evitar duplicatas por dispositivo e `sampleId`, gravar as medições e calcular os estados e eventos de alarme.
-4. Implementar `POST /sensors/{id}/insights` quando houver histórico. O .NET calcula os indicadores e usa o Gemini para resumir o período.
+4. Disponibilizar os dados necessários para os indicadores e a análise, conforme o contrato entre as equipes. A funcionalidade com Spring AI permanece no Java para atender ao enunciado de Java Advanced.
 
 ### Integração entre as equipes
 
@@ -45,7 +53,7 @@ As listas são retornadas como arrays JSON. Os erros usam `{ "message": "..." }`
 
 1. **Java.** Entrar com os três perfis, cadastrar um equipamento como administrador e abrir um relato dentro da cobertura como morador. Como operadora, consultar e atualizar o protocolo.
 2. **.NET.** Com a mesma sessão de operadora, verificar se o equipamento cadastrado no Java aparece no mapa e se a ficha exibe as leituras de teste. Na aba **Relatos por bairro**, verificar o endereço do equipamento pelo `sensorId` do relato.
-3. **IoT e IA.** Depois de validar as duas APIs por HTTP, publicar uma leitura no HiveMQ, verificar se ela entra no histórico e aparece no app e, por último, gerar o insight do período.
+3. **IoT e IA.** Depois de validar as duas APIs por HTTP, publicar uma leitura no HiveMQ e verificar o histórico no app. A análise usa o endpoint Java com Spring AI. Com o Gemini configurado no backend, a resposta indica `aiGenerated: true`.
 
 ### Testar o Java com o app
 
@@ -53,7 +61,7 @@ As listas são retornadas como arrays JSON. Os erros usam `{ "message": "..." }`
 2. No mobile, use Node.js 22.13 ou superior e execute `npm ci`. Crie `.env.local` a partir do [.env.example](.env.example) e configure `EXPO_PUBLIC_API_URL=http://localhost:8080/api`. Para testar no celular, troque `localhost` pelo IP do computador na rede local. Na nuvem, use a URL HTTPS real da API com o sufixo `/api`.
 3. Rode `npx expo start`, pressione **w** e entre com uma conta da API. Reinicie o Expo após alterar a URL. Se restringir o CORS do Java, inclua a origem do Expo e exponha o cabeçalho `X-Total-Pages`.
 
-O [cliente HTTP](src/services/api.js) usa o JWT do Java, percorre as páginas das listas e envia fotos de relatos e complementos via multipart. O app lê `GET /sensors` e `GET /sensors/{id}` do Java provisoriamente para manter o catálogo, os endereços e a ficha acessíveis. A segunda base HTTP, os insights no modo integrado e a ingestão IoT ficam para a etapa .NET. `EXPO_PUBLIC_IOT_URL` pertence à ponte da demonstração local.
+O [cliente HTTP](src/services/api.js) usa o JWT do Java, percorre as páginas das listas e envia fotos de relatos e complementos via multipart. O app lê `GET /sensors` e `GET /sensors/{id}` do Java provisoriamente para manter o catálogo, os endereços e a ficha acessíveis. O botão **Gerar análise com IA** consome `POST /sensors/{id}/insights` do Java e usa os dados do período escolhido. A segunda base HTTP e a ingestão IoT ficam para a etapa .NET. `EXPO_PUBLIC_IOT_URL` é uma configuração opcional do ambiente local.
 
 ### Ajustes pendentes no backend
 
@@ -62,7 +70,9 @@ O [cliente HTTP](src/services/api.js) usa o JWT do Java, percorre as páginas da
 
 ## Consultar o fluxo local
 
-Para conhecer as telas com AsyncStorage, deixe `EXPO_PUBLIC_API_URL` e `EXPO_PUBLIC_IOT_URL` vazias. Rode `npx expo start` e pressione **w**. Estas contas também são provisionadas pelo perfil `local` do Java.
+Para a avaliação de persistência local da disciplina Mobile, defina `EXPO_PUBLIC_LOCAL_MODE=true` e deixe `EXPO_PUBLIC_API_URL` e `EXPO_PUBLIC_IOT_URL` vazias. O acesso é feito por e-mail e senha. Uma instalação nova começa com listas vazias, e os registros existentes no aparelho são preservados. No fluxo principal, configure a URL do Java e mantenha `EXPO_PUBLIC_LOCAL_MODE=false`.
+
+As contas abaixo pertencem ao ambiente de desenvolvimento e também são provisionadas pelo perfil `local` do Java. No ambiente publicado, use as contas provisionadas pelo responsável pelo backend.
 
 | Perfil | E-mail | Senha |
 | --- | --- | --- |

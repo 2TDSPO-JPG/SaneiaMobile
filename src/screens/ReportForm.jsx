@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Image, Pressable, Text, View } from 'react-native';
 import { demoCenter } from '../data/demo';
 import { eligibilityMessage, occurrenceEligibility, previousOpenReport } from '../report-policy';
-import { api, demoMode } from '../services/api';
+import { api } from '../services/api';
 import { useErrorText, useSession } from '../session';
 import { categories, colors, reportStatus } from '../theme';
 import { useResource } from '../use-resource';
@@ -27,7 +27,7 @@ export function ReportFormScreen() {
   const state = useResource(load);
   const { session } = useSession();
   if (session?.user.role !== 'resident') return <Screen back><Notice error text="Esta ação está disponível para moradores." /></Screen>;
-  return <Screen back>
+  return <Screen back narrow>
     <Heading kicker="Atendimento" title={id ? 'Editar relato' : 'Novo relato'}
       subtitle="Indique onde aconteceu e conte o que você observou." />
     <Resource state={state}>{({ initial, reports }) => {
@@ -140,7 +140,6 @@ function ReportFields({ initial, reports }) {
       <MonitorMap center={coordinate || demoCenter} selection={coordinate} onSelect={setCoordinate} />
       {coordinate && <Body>{coordinate.latitude.toFixed(5)}, {coordinate.longitude.toFixed(5)}</Body>}
       <Button secondary title="Usar minha localização" icon="crosshair" busy={locating} onPress={locate} />
-      {demoMode && <Button secondary title="Marcar ponto de exemplo" onPress={() => setCoordinate(demoCenter)} />}
       {coordinate && !verified && <Body>Consultando cobertura…</Body>}
       {!!verified?.error && <Notice error text={verified.error} />}
       {verified?.value && <Badge

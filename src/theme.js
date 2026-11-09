@@ -1,8 +1,8 @@
 export const colors = {
-  ink: '#132E36', primary: '#007665', mint: '#A4EBD3', surface: '#FFFFFF',
-  canvas: '#F1F6F4', muted: '#48656B', line: '#D7E5E0', soft: '#E0F2EC',
-  danger: '#A53329', dangerBg: '#FBECE9', blue: '#1E617C', blueBg: '#E7F2F8',
-  grayBg: '#E9EFEE', warning: '#8A5700', warningBg: '#FFF1BF',
+  ink: '#192E2B', primary: '#17694F', mint: '#BEE3CF', surface: '#FFFFFF',
+  canvas: '#F5F7F6', muted: '#63716C', line: '#DFE6E2', soft: '#EAF3ED',
+  danger: '#B34438', dangerBg: '#FBEFEC', blue: '#366582', blueBg: '#ECF3F8',
+  grayBg: '#EDF0EE', warning: '#93631B', warningBg: '#FCF4E4',
 };
 
 export const roleLabels = {

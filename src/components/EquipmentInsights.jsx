@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { Text } from 'react-native';
 import { api, demoMode } from '../services/api';
-import { useErrorText } from '../session';
+import { useErrorText, useSession } from '../session';
 import { liters, reportDate } from '../theme';
 import { Body, Button, Card, Notice, styles } from '../ui';
 
 export function EquipmentInsights({ sensor, readings, range }) {
+  const { session } = useSession();
   const errorText = useErrorText();
   const [summary, setSummary] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -21,11 +22,11 @@ export function EquipmentInsights({ sensor, readings, range }) {
     setBusy(true);
     setError('');
     try {
-      const result = await api.sensorInsights(sensor.id, range);
+      const result = await api.sensorInsights(session, sensor.id, range);
       if (typeof result.summary !== 'string' || !result.summary.trim()) {
-        throw new Error('A API não retornou uma análise para este período.');
+        throw new Error('A análise está indisponível para este período. Tente novamente.');
       }
-      setSummary({ text: result.summary.trim(), to: range.to });
+      setSummary({ text: result.summary.trim(), to: range.to, generated: result.aiGenerated !== false });
     } catch (failure) {
       setError(errorText(failure));
     } finally {
@@ -43,13 +44,12 @@ export function EquipmentInsights({ sensor, readings, range }) {
         : <Body>São necessárias pelo menos duas leituras com data para comparar a variação no período.</Body>}
       {compared.length > 0 && <Body>{reached} de {compared.length} leituras comparáveis atingiram ou passaram do limite
         {usesCurrentLimit ? ', usando o limite atual quando o histórico não informa o valor vigente' : ''}.</Body>}
-      {!sensor.liveTelemetry ? <Body>{demoMode
-        ? 'Estes indicadores usam dados de exemplo. A análise do Gemini está disponível em equipamentos conectados à ponte IoT.'
-        : 'A análise com IA será disponibilizada pela API .NET.'}</Body>
+      {demoMode && !sensor.liveTelemetry ? <Body>A análise está disponível para equipamentos com leituras recebidas.</Body>
         : <Button secondary title={summary ? 'Atualizar análise com IA' : 'Gerar análise com IA'}
           icon="activity" onPress={analyze} busy={busy} disabled={dated.length === 0} />}
       <Notice error text={error} />
-      {summary ? <><Text style={styles.section}>Análise por IA</Text>
+      {summary ? <><Text style={styles.section}>Análise do período</Text>
+        {summary.generated === false && <Body style={{ fontSize: 12 }}>Resumo calculado a partir dos indicadores.</Body>}
         <Body>Considera as leituras até {reportDate(summary.to)}.</Body><Body>{summary.text}</Body></> : null}
     </>}
   </Card>;

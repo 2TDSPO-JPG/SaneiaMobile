@@ -1,9 +1,9 @@
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text } from 'react-native';
 import { reportOrder } from '../report-policy';
 import { categories, colors, equipmentStatus, reportDate, reportStatus, sensorStatus } from '../theme';
-import { Body, ListItem, Notice, styles } from '../ui';
+import { Body, EmptyState, ListItem } from '../ui';
 
 const equipmentFilters = [['all', 'Todos'], ...Object.entries(sensorStatus).map(([key, item]) => [key, item.label])];
 const categoryFilters = [['all', 'Todos'], ...categories.map((category) => [category, category])];
@@ -11,13 +11,14 @@ const coverageFilters = [['all', 'Todos'], ['nearby', 'Com equipamento próximo'
 const assessmentFilters = [['all', 'Todos'], ['requested', 'Avaliação solicitada'], ['none', 'Sem avaliação solicitada']];
 
 export function Filters({ label, options, value, onChange }) {
-  return <View accessibilityRole={label ? 'tablist' : undefined} accessibilityLabel={label} style={styles.wrap}>
+  return <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }}
+    accessibilityRole={label ? 'tablist' : undefined} accessibilityLabel={label} contentContainerStyle={{ gap: 7 }}>
     {options.map(([id, label]) => <Pressable key={id} accessibilityRole="tab"
       accessibilityLabel={label} accessibilityState={{ selected: value === id }}
       onPress={() => onChange(id)} style={[filterStyle.chip, value === id && filterStyle.active]}>
       <Text style={[filterStyle.text, value === id && filterStyle.activeText]}>{label}</Text>
     </Pressable>)}
-  </View>;
+  </ScrollView>;
 }
 
 export function EquipmentFilters({ value, onChange }) {
@@ -29,7 +30,7 @@ export const filterEquipment = (equipment, status) => status === 'all'
 
 export function EquipmentRows({ equipment }) {
   const router = useRouter();
-  if (!equipment.length) return <Notice text="Nenhum equipamento neste filtro." />;
+  if (!equipment.length) return <EmptyState icon="cpu" title="Nenhum equipamento encontrado" description="Os equipamentos disponíveis aparecerão aqui." />;
   return equipment.map((sensor) => {
     const status = sensorStatus[equipmentStatus(sensor)];
     return <ListItem key={sensor.id} title={`${sensor.prefix || sensor.id} · ${sensor.name}`}
@@ -63,7 +64,8 @@ export function ReportQueue({ reports, operator = false, equipmentById }) {
       <Filters label="Avaliação técnica" options={assessmentFilters} value={assessment} onChange={setAssessment} />
       <Body style={{ fontSize: 13 }}>Mais antigos primeiro · {visible.length} {visible.length === 1 ? 'relato' : 'relatos'}</Body>
     </>}
-    {visible.length === 0 && <Body>{operator ? 'Nenhum relato com estes filtros.' : 'Nenhum relato nesta categoria.'}</Body>}
+    {visible.length === 0 && <EmptyState title="Nenhum relato encontrado"
+      description={operator ? 'Altere os filtros para consultar outros registros.' : 'Seus relatos aparecerão aqui depois do primeiro registro.'} />}
     {visible.map((report) => {
       const status = reportStatus[report.status];
       const priority = operator && report.previousReportId && report.status !== 'closed';
@@ -79,10 +81,10 @@ export function ReportQueue({ reports, operator = false, equipmentById }) {
 }
 
 const filterStyle = StyleSheet.create({
-  label: { color: colors.ink, fontSize: 13, fontWeight: '800' },
+  label: { color: colors.muted, fontSize: 12, fontWeight: '500' },
   chip: { paddingHorizontal: 12, paddingVertical: 9, minHeight: 36, justifyContent: 'center',
-    borderRadius: 10, backgroundColor: colors.surface, borderColor: colors.line, borderWidth: 1 },
+    borderRadius: 6, backgroundColor: colors.surface, borderColor: colors.line, borderWidth: 1 },
   active: { backgroundColor: colors.soft, borderColor: colors.primary },
-  text: { color: colors.muted, fontSize: 12, fontWeight: '700' },
+  text: { color: colors.muted, fontSize: 12, fontWeight: '500' },
   activeText: { color: colors.primary },
 });
