@@ -39,6 +39,72 @@ Para usar a API local com um catálogo vazio, configure `SEED_DEMO_DATA=false` n
 
 O [contrato das APIs](docs/api.md) detalha rotas, campos e erros. A integração atual usa o [backend Java do Saneia](https://github.com/2TDSPO-JPG/API-Java-Global-Solutions) como referência.
 
+## Endpoints e forma de acesso
+
+As rotas abaixo são relativas ao prefixo `/api` de cada serviço. No desenvolvimento, a base do Java é `http://localhost:8080/api`. A URL e a porta do .NET serão fornecidas pelo responsável por essa API. No app, a URL do Java vem de `EXPO_PUBLIC_API_URL`. A configuração de uma segunda base para o .NET é uma etapa pendente do cliente.
+
+O mobile faz login no Java e usa o `token` retornado no cabeçalho `Authorization: Bearer <token>` das chamadas protegidas. As duas APIs devem aceitar a mesma sessão, com validação de expiração e papel no servidor. Para JSON, o app envia `Content-Type: application/json`. Para fotos, envia multipart com a parte textual `report` e o arquivo `photo`.
+
+### Rotas do Java
+
+| Método e rota | Quem acessa | Entrada ou resultado esperado |
+| --- | --- | --- |
+| `POST /auth/login` | Público | Recebe `email` e `password`. Retorna `token`, `expiresAt` e `user` |
+| `POST /auth/signup` | Público | Recebe `name`, `email` e `password`. Cria morador e retorna a sessão |
+| `GET /admin/users` | Administrador | Retorna usuários com `id`, `name`, `email` e `role` |
+| `GET /admin/sensors` | Administrador | Lista o catálogo ativo |
+| `GET /admin/sensors/{id}` | Administrador | Consulta o cadastro de um equipamento |
+| `POST /admin/sensors` | Administrador | Cria equipamento com endereço, coordenadas, capacidade, limite e raio |
+| `PATCH /admin/sensors/{id}` | Administrador | Atualiza o cadastro e preserva as leituras |
+| `DELETE /admin/sensors/{id}` | Administrador | Retira o equipamento ativo. Responde `204` |
+| `GET /coverage?latitude=…&longitude=…` | Morador | Retorna `{ sensorId, status }` para as coordenadas informadas |
+| `GET /reports` | Morador e operadora | Morador recebe os próprios relatos. Operadora recebe a fila |
+| `GET /reports/{id}` | Dono do relato e operadora | Retorna detalhe, fotos e complementos. A avaliação técnica aparece para a operadora |
+| `POST /reports` | Morador | Cria relato e retorna o protocolo |
+| `PATCH /reports/{id}` | Dono do relato | Atualiza um relato em `received` |
+| `DELETE /reports/{id}` | Dono do relato | Exclui um relato em `received`. Responde `204` |
+| `POST /reports/{id}/updates` | Dono do relato | Acrescenta texto e/ou foto a um protocolo aberto |
+| `PATCH /reports/{id}/status` | Operadora | Recebe `status`, `progressNote` e `resolution` |
+| `POST /reports/{id}/assessment` | Operadora | Recebe `note` e registra a avaliação técnica |
+| `POST /sensors/{id}/insights` | Operadora | Recebe o período e retorna `summary`, `aiGenerated` e indicadores via Spring AI |
+
+Os papéis retornados em `user.role` são `resident`, `operator` e `admin`. O app seleciona a área a partir desse campo.
+
+### Rotas do .NET
+
+| Método e rota | Quem acessa | Uso no app |
+| --- | --- | --- |
+| `GET /sensors` | Operadora | Mapa, filtros, totais por estado e endereços dos equipamentos vinculados aos relatos |
+| `GET /sensors/{id}` | Operadora | Ficha completa, leituras do gráfico e eventos do equipamento |
+
+Essas consultas usarão o Bearer obtido no Java. O app consulta o mapa e a ficha a cada cinco segundos enquanto a tela estiver em foco. As listas são arrays JSON. Os IDs devem coincidir com os IDs do catálogo Java. O .NET deve retornar o mesmo formato `Sensor` descrito no [contrato](docs/api.md), incluindo endereço, coordenadas, estado, volume, capacidade, limite e histórico.
+
+O endereço completo fica em `address`, o bairro em `neighborhood` e os campos separados ficam em `postalAddress`, quando disponíveis. Os estados são `normal`, `warning`, `alarm` e `offline`. Um equipamento sem leitura tem `status: "offline"`, `volume: null`, `lastReadingAt: null` e listas de histórico vazias.
+
+### Exemplo do login no Java
+
+```http
+POST http://localhost:8080/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "operadora@saneia.test",
+  "password": "Saneia2026!"
+}
+```
+
+Com o token dessa resposta, a chamada de monitoramento seguirá este formato quando a segunda API estiver integrada. A base `https://api-dotnet.exemplo/api` ilustra o endereço a ser substituído pela URL real.
+
+```http
+GET https://api-dotnet.exemplo/api/sensors/21
+Accept: application/json
+Authorization: Bearer <token retornado pelo Java>
+```
+
+As duas APIs devem permitir a origem do Expo no CORS, os métodos utilizados, os cabeçalhos `Authorization` e `Content-Type` e o preflight `OPTIONS`. Listas paginadas usam `page` e `size`, retornam arrays e expõem `X-Total-Pages` no CORS para o cliente percorrer todas as páginas. Erros seguem `{ "message": "..." }`, com `401` para sessão inválida ou expirada e `403` para falta de permissão.
+
+**Situação atual do acesso.** O login, os cadastros e os relatos já usam o Java. O mapa e a ficha também leem o catálogo do Java provisoriamente. Ao receber a base do .NET, o cliente deverá encaminhar os dois GETs de monitoramento para ela. O endpoint de insights permanece no Java.
+
 ## Regras que o Java precisa aplicar
 
 - **Contas e acesso.** O login devolve `token` e `user: { id, name, email, role }`. Os papéis são `resident`, `operator` e `admin`. O cadastro público cria moradores. Provisione contas de operadora e administrador pelo backend. Valide o token Bearer, o papel e a propriedade de cada relato no servidor. Retorne `401` para sessão inválida e `403` para conta autenticada sem a permissão exigida.
