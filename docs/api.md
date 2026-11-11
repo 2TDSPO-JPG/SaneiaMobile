@@ -38,12 +38,13 @@ O monitoramento exige o papel `operator`. O .NET monta as respostas com dados do
 
 ### Análise com Spring AI no Java
 
-`POST /sensors/{id}/insights` é consumido na base Java com o mesmo token da operadora e recebe `period`, `from` e `to`. Retorna `summary`, `aiGenerated` e os indicadores calculados. A funcionalidade Spring AI integra o fluxo da solução exigido em Java Advanced. Quando a telemetria passar ao .NET, as equipes devem alinhar como o Java obterá as medições para manter essa análise.
+`POST /sensors/{id}/insights` é consumido na base Java com o mesmo token da operadora e recebe `period`, `from` e `to`. Retorna `summary`, `aiGenerated`, `telemetrySource` e os indicadores calculados. Com `DOTNET_TELEMETRY_URL` configurada no Java, os indicadores vêm do .NET para o período solicitado. O Spring AI permanece no Java.
 
 ### Comunicação entre as APIs
 
 - O Java atual emite JWT HS256 com emissor `saneia-api`, claim `role` e sem audiência. O .NET usa `Jwt__SharedSecret` com o mesmo valor de `JWT_SECRET` do Java e valida assinatura, emissor, identificador, expiração e papel. O segredo é configurado somente nos servidores. A aplicação faz um único login.
-- Para ler o catálogo, o .NET pode reaproveitar `GET /sensors` e `GET /sensors/{id}` na base do Java, se essas rotas já existirem. A consulta iniciada pela operadora pode encaminhar o token da sessão. A ingestão MQTT, em etapa posterior, usa credencial de serviço para consultar o catálogo. O mesmo `id` do catálogo identifica o equipamento no monitoramento e no vínculo do relato.
+- O .NET encaminha o token da operadora ao consultar `GET /sensors` e `GET /sensors/{id}` no Java. Para receber MQTT, consulta `GET /internal/catalog/sensors/by-prefix/{prefix}` com `X-Saneia-Integration-Key`. O mesmo `id` do catálogo identifica o equipamento no monitoramento e no vínculo do relato.
+- O Java consulta `GET /internal/telemetry/sensors/{id}/summary` no .NET com a mesma credencial de integração. O resumo aplica os limites `from` e `to` e agrega os dados no banco .NET. A chave fica nas variáveis dos servidores.
 - O Java é responsável pelas tabelas de usuários, equipamentos e relatos. O .NET é responsável pelas tabelas de medições e eventos. No IoT, identifique o dispositivo no catálogo e grave cada `sampleId` uma vez por dispositivo. A retirada de um equipamento afeta as consultas ao catálogo ativo e preserva o histórico.
 
 ## Formatos e regras de negócio

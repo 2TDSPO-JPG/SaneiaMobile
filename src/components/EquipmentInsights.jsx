@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Text } from 'react-native';
-import { api, demoMode, dotNetMonitoring } from '../services/api';
+import { api, demoMode } from '../services/api';
 import { useErrorText, useSession } from '../session';
 import { liters, reportDate } from '../theme';
 import { Body, Button, Card, Notice, styles } from '../ui';
@@ -26,7 +26,8 @@ export function EquipmentInsights({ sensor, readings, range }) {
       if (typeof result.summary !== 'string' || !result.summary.trim()) {
         throw new Error('A análise está indisponível para este período. Tente novamente.');
       }
-      setSummary({ text: result.summary.trim(), to: range.to, generated: result.aiGenerated !== false });
+      setSummary({ text: result.summary.trim(), to: range.to, generated: result.aiGenerated !== false,
+        source: result.telemetrySource });
     } catch (failure) {
       setError(errorText(failure));
     } finally {
@@ -47,10 +48,10 @@ export function EquipmentInsights({ sensor, readings, range }) {
       {demoMode && !sensor.liveTelemetry ? <Body>A análise está disponível para equipamentos com leituras recebidas.</Body>
         : <Button secondary title={summary ? 'Atualizar análise com IA' : 'Gerar análise com IA'}
           icon="activity" onPress={analyze} busy={busy} disabled={dated.length === 0} />}
-      {dotNetMonitoring && <Body>A análise com IA usa as leituras disponíveis no Java.</Body>}
       <Notice error text={error} />
       {summary ? <><Text style={styles.section}>Análise do período</Text>
         {summary.generated === false && <Body style={{ fontSize: 12 }}>Resumo calculado a partir dos indicadores.</Body>}
+        {summary.source && <Body>Histórico da API {summary.source === 'dotnet' ? '.NET' : 'Java'}.</Body>}
         <Body>Considera as leituras até {reportDate(summary.to)}.</Body><Body>{summary.text}</Body></> : null}
     </>}
   </Card>;

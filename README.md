@@ -29,7 +29,7 @@ Para usar a API local com um catálogo vazio, configure `SEED_DEMO_DATA=false` n
 1. Fornecer `GET /sensors` para o mapa da operadora e `GET /sensors/{id}` para a ficha, unindo o cadastro lido do Java à telemetria pelo `id` do equipamento.
 2. Guardar as medições e os eventos. O perfil de desenvolvimento usa SQLite. Em Oracle, prepare o esquema com o script do repositório .NET. Um equipamento sem leituras aparece como `offline`.
 3. Receber medições de teste por `POST /sensors/{id}/readings`, usando o JWT da operadora e o prefixo como `deviceId`. O backend deduplica por dispositivo e `sampleId`.
-4. Conectar **Wokwi e HiveMQ** à ingestão e disponibilizar a telemetria para a análise do Java nas próximas etapas.
+4. Receber leituras do **Wokwi via HiveMQ** e disponibilizar ao Java o resumo da telemetria por período.
 
 ### Integração entre as equipes
 
@@ -122,7 +122,14 @@ As listas são retornadas como arrays JSON. Os erros usam `{ "message": "..." }`
 
 O cliente envia `postalAddress` ao Java no cadastro e na edição e usa o mesmo objeto ao reabrir o formulário. Equipamentos legados podem preservar o endereço livre. O endereço formatado aceita até 200 caracteres, o número até 10 e o complemento até 80. Para exigir o objeto nos novos cadastros, configure `SANEIA_REQUIRE_POSTAL_ADDRESS=true` no Java.
 
-O botão **Gerar análise com IA** chama o Java com o período escolhido. O gráfico usa as leituras do .NET quando configurado. O Java calcula a análise com as leituras disponíveis em seu próprio banco até que receba a telemetria do .NET. A ingestão de leituras de teste é HTTP. A ligação com Wokwi/HiveMQ fica para a etapa de IoT.
+### Testar Wokwi e análise com o mesmo histórico
+
+1. Nos dois backends, defina a mesma `SANEIA_INTEGRATION_KEY` de pelo menos 32 bytes. Defina `DOTNET_TELEMETRY_URL=http://localhost:5085/api` no Java e `Mqtt__Enabled=true` no .NET. Use o mesmo JWT entre os backends, conforme o procedimento acima.
+2. No app, cadastre como administrador o equipamento `RES-07` com capacidade de 2.000 L e limite de 1.800 L. O .NET usa esse prefixo para associar as leituras do sketch Wokwi `S07` ao ID cadastrado.
+3. Inicie o Wokwi com os [arquivos do circuito](https://github.com/2TDSPO-JPG/API-DotNet-Global-Solutions/tree/main/wokwi) e, como operadora, abra a ficha. A distância de 17 cm gera aproximadamente 1.850 L e deve abrir um alarme. O app consulta o .NET a cada cinco segundos. O broker público da configuração de demonstração recebe somente leituras fictícias.
+4. Toque em **Gerar análise com IA**. O Java consulta o mesmo histórico no .NET, e o app indica **Histórico da API .NET**. Com `GEMINI_API_KEY` configurada no Java, confira `aiGenerated: true` na resposta.
+
+Os detalhes de broker, credenciais e calibração ficam no [README do .NET](https://github.com/2TDSPO-JPG/API-DotNet-Global-Solutions#saneia--api-net-de-monitoramento).
 
 ## Consultar o fluxo local
 
