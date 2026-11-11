@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Text } from 'react-native';
-import { api, demoMode } from '../services/api';
+import { api, demoMode, dotNetMonitoring } from '../services/api';
 import { useErrorText, useSession } from '../session';
 import { liters, reportDate } from '../theme';
 import { Body, Button, Card, Notice, styles } from '../ui';
@@ -47,6 +47,7 @@ export function EquipmentInsights({ sensor, readings, range }) {
       {demoMode && !sensor.liveTelemetry ? <Body>A análise está disponível para equipamentos com leituras recebidas.</Body>
         : <Button secondary title={summary ? 'Atualizar análise com IA' : 'Gerar análise com IA'}
           icon="activity" onPress={analyze} busy={busy} disabled={dated.length === 0} />}
+      {dotNetMonitoring && <Body>A análise com IA usa as leituras disponíveis no Java.</Body>}
       <Notice error text={error} />
       {summary ? <><Text style={styles.section}>Análise do período</Text>
         {summary.generated === false && <Body style={{ fontSize: 12 }}>Resumo calculado a partir dos indicadores.</Body>}

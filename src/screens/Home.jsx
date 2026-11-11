@@ -9,12 +9,7 @@ import { Body, Brand, Button, Card, EmptyState, Heading, ListItem, Metric, Resou
 import { EquipmentRows } from '../components/Operations';
 import { AdminHomeScreen } from './Admin';
 
-async function loadOverview(session) {
-  const reports = api.listReports(session);
-  const sensors = session.user.role === 'operator' ? api.sensors(session) : Promise.resolve([]);
-  const [allReports, allSensors] = await Promise.all([reports, sensors]);
-  return { reports: allReports, sensors: allSensors };
-}
+const loadOperatorSensors = (session) => session.user.role === 'operator' ? api.sensors(session) : Promise.resolve([]);
 
 export function HomeScreen() {
   const { session } = useSession();
@@ -24,7 +19,8 @@ export function HomeScreen() {
 
 function OperationsHome({ session }) {
   const router = useRouter();
-  const overview = useResource(loadOverview);
+  const equipment = useResource(loadOperatorSensors);
+  const queue = useResource(api.listReports);
   const operator = session.user.role === 'operator';
 
   return <Screen tabs>
@@ -36,9 +32,9 @@ function OperationsHome({ session }) {
       <Body>Informe o local e descreva o problema de saneamento.</Body>
       <Button title="Registrar relato" icon="plus" onPress={() => router.push('/novo-relato')} />
     </Card>}
-    <Resource state={overview}>{({ reports, sensors }) => <>
-      {operator && <>
-        <Text style={styles.section}>Equipamentos</Text>
+    {operator && <>
+      <Text style={styles.section}>Equipamentos</Text>
+      <Resource state={equipment}>{(sensors) => <>
         <View style={styles.metrics}>
           {[['alarm', 'Equipamentos em alarme', 'alert-octagon', 'red'], ['warning', 'Equipamentos em alerta', 'alert-triangle', 'yellow'],
             ['normal', 'Equipamentos OK', 'check-circle', 'green'], ['offline', 'Sem comunicação', 'wifi-off', 'neutral']].map(([status, label, icon, tone]) => (
@@ -46,8 +42,13 @@ function OperationsHome({ session }) {
               onPress={() => router.push({ pathname: '/mapa', params: { status } })} />
           ))}
         </View>
-        <Text style={styles.section}>Atendimento ao morador</Text>
-      </>}
+        <View style={home.sectionRow}><Text style={styles.section}>Pontos de atenção</Text>
+          <Button secondary title="Abrir mapa" icon="map" onPress={() => router.push('/mapa')} /></View>
+        <EquipmentRows equipment={sensors.filter((sensor) => ['alarm', 'warning'].includes(equipmentStatus(sensor))).slice(0, 4)} />
+      </>}</Resource>
+      <Text style={styles.section}>Atendimento ao morador</Text>
+    </>}
+    <Resource state={queue}>{(reports) => <>
       <View style={styles.metrics}>
         <Metric label="Relatos em aberto" value={reports.filter((item) => item.status !== 'closed').length}
           icon="file-text"
@@ -60,11 +61,6 @@ function OperationsHome({ session }) {
           icon="check-circle"
           onPress={() => router.push({ pathname: '/relatos', params: { scope: 'closed' } })} />}
       </View>
-      {operator && <>
-        <View style={home.sectionRow}><Text style={styles.section}>Pontos de atenção</Text>
-          <Button secondary title="Abrir mapa" icon="map" onPress={() => router.push('/mapa')} /></View>
-        <EquipmentRows equipment={sensors.filter((sensor) => ['alarm', 'warning'].includes(equipmentStatus(sensor))).slice(0, 4)} />
-      </>}
       <Text style={styles.section}>{operator ? 'Últimos relatos recebidos' : 'Últimas solicitações'}</Text>
       {reports.length ? [...reports].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)).slice(0, 3).map((report) =>
         <ListItem key={report.id} title={report.category} description={`${report.protocol} · ${report.address}`} icon="file-text"

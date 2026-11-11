@@ -124,6 +124,7 @@ function EquipmentForm({ sensor }) {
   const errorText = useErrorText();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState({});
   const [lookupBusy, setLookupBusy] = useState(false);
   const [lookupError, setLookupError] = useState('');
   const [locating, setLocating] = useState(false);
@@ -140,8 +141,11 @@ function EquipmentForm({ sensor }) {
   });
   const formBusy = busy || lookupBusy || locating;
   const currentCoordinate = readCoordinate(fields);
-  const field = (key, label, props) => <Field label={label} value={fields[key]} editable={!formBusy}
-    onChangeText={(value) => changeField(key, value)} {...props} />;
+  const field = (key, label, props) => <>
+    <Field label={label} value={fields[key]} editable={!formBusy}
+      onChangeText={(value) => changeField(key, value)} {...props} />
+    <Notice error text={fieldErrors[key]} />
+  </>;
   const decimal = { keyboardType: 'numbers-and-punctuation' };
 
   function changeField(key, value) {
@@ -149,6 +153,7 @@ function EquipmentForm({ sensor }) {
     if (key === 'cep') setLookupError('');
     if (changedCep) setLocationSource(null);
     if (key === 'latitude' || key === 'longitude') setLocationSource('manual');
+    if (fieldErrors[key]) setFieldErrors((current) => ({ ...current, [key]: undefined }));
     setFields((current) => ({ ...current, [key]: value, ...(changedCep && { latitude: '', longitude: '' }) }));
   }
 
@@ -160,6 +165,7 @@ function EquipmentForm({ sensor }) {
   async function searchCep() {
     setLookupError('');
     setError('');
+    setFieldErrors({});
     setLookupBusy(true);
     try {
       const { coordinate, ...address } = await lookupCep(fields.cep);
@@ -190,12 +196,15 @@ function EquipmentForm({ sensor }) {
 
   async function submit(remove = false) {
     setError('');
+    setFieldErrors({});
     setBusy(true);
     try {
       if (remove) await api.deleteEquipment(session, sensor.id);
       else await api.saveEquipment(session, equipmentInput(fields, sensor), sensor.id);
       router.dismissTo('/equipamentos');
     } catch (failure) {
+      setFieldErrors(Object.fromEntries((failure.fieldErrors ?? []).map(({ field, message }) =>
+        [field.replace(/^(postalAddress|coordinate)\./, ''), message])));
       setError(errorText(failure));
     } finally {
       setBusy(false);
@@ -215,11 +224,11 @@ function EquipmentForm({ sensor }) {
       <Button title="Buscar CEP" icon="search" secondary busy={lookupBusy} disabled={busy || locating || confirmDelete} onPress={searchCep} />
       <Notice error text={lookupError} />
       {field('street', 'Logradouro', { maxLength: 120 })}
-      {field('number', 'Número', { maxLength: 20, placeholder: 'Ex.: 25 ou S/N' })}
+      {field('number', 'Número', { maxLength: 10, placeholder: 'Ex.: 25 ou S/N' })}
       {field('neighborhood', 'Bairro ou região', { maxLength: 80 })}
       {field('city', 'Cidade', { maxLength: 80 })}
       {field('state', 'UF', { autoCapitalize: 'characters', maxLength: 2 })}
-      {field('complement', 'Complemento (opcional)', { maxLength: 120 })}
+      {field('complement', 'Complemento (opcional)', { maxLength: 80 })}
     </Card>
     <Card>
       <Text style={styles.section}>Localização no mapa</Text>

@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Image, Pressable, Text, View } from 'react-native';
 import { demoCenter } from '../data/demo';
 import { eligibilityMessage, occurrenceEligibility, previousOpenReport } from '../report-policy';
-import { api } from '../services/api';
+import { api, dotNetMonitoring } from '../services/api';
 import { useErrorText, useSession } from '../session';
 import { categories, colors, reportStatus } from '../theme';
 import { useResource } from '../use-resource';
@@ -144,7 +144,8 @@ function ReportFields({ initial, reports }) {
       {!!verified?.error && <Notice error text={verified.error} />}
       {verified?.value && <Badge
         label={verified.value.sensorId
-          ? verified.value.status === 'offline' ? 'Com sensor próximo · sem comunicação' : 'Com sensor próximo'
+          ? verified.value.status === 'offline' && !dotNetMonitoring
+            ? 'Com sensor próximo · sem comunicação' : 'Com sensor próximo'
           : 'Sem sensor próximo'}
         tone={verified.value.sensorId ? 'green' : 'neutral'} />}
     </Card>

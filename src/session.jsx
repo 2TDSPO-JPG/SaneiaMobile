@@ -14,7 +14,7 @@ export function useSession() {
 export function useErrorText() {
   const { setSession } = useSession();
   return useCallback((error) => {
-    if (error.status === 401) setSession(null);
+    if (error.sessionRejected) setSession(null);
     return error.message;
   }, [setSession]);
 }

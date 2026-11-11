@@ -1,6 +1,6 @@
 # Saneia Mobile
 
-O Saneia recebe relatos de saneamento dos moradores, organiza o atendimento da operadora e permite que a administração gerencie o catálogo de equipamentos. O app usa React Native, Expo SDK 58 e Expo Router, com AsyncStorage no modo local. A integração prevê duas APIs, **Java (Spring Boot)** e **.NET (ASP.NET Core)**, com persistência no Oracle.
+O Saneia recebe relatos de saneamento dos moradores, organiza o atendimento da operadora e permite que a administração gerencie o catálogo de equipamentos. O app usa React Native, Expo SDK 58 e Expo Router, com AsyncStorage no modo local. O fluxo conectado usa **Java (Spring Boot)** para atendimento e cadastro e **.NET (ASP.NET Core)** para monitoramento.
 
 ## Interface e acesso
 
@@ -12,36 +12,36 @@ Para usar a API local com um catálogo vazio, configure `SEED_DEMO_DATA=false` n
 
 ## Quem implementa o quê
 
-| API | Responsabilidade | Rotas consumidas pelo mobile após a integração |
+| API | Responsabilidade | Rotas consumidas pelo mobile |
 | --- | --- | --- |
-| **Java** | Contas e permissões, cadastro de equipamentos, cobertura geográfica e todo o atendimento dos moradores. | `POST /auth/login`, `POST /auth/signup`, `GET /admin/users`, CRUD em `/admin/sensors`, `GET /coverage` e rotas de `/reports` |
-| **.NET** | Monitoramento da operadora. Junta o catálogo do Java com o último estado, o volume, o histórico e os eventos de cada equipamento. Depois recebe as leituras do IoT. | `GET /sensors` e `GET /sensors/{id}`, quando a segunda base estiver integrada |
+| **Java** | Contas e permissões, cadastro de equipamentos, cobertura, relatos e análise com Spring AI. | `POST /auth/login`, `POST /auth/signup`, `GET /admin/users`, CRUD em `/admin/sensors`, `GET /coverage`, rotas de `/reports` e `POST /sensors/{id}/insights` |
+| **.NET** | Monitoramento da operadora. Junta o catálogo do Java com o último estado, o volume, o histórico e os eventos de cada equipamento. | `GET /sensors` e `GET /sensors/{id}` |
 
 ### Java — negócio e administração
 
 1. Autenticar e cadastrar moradores, listar usuários para o administrador e aplicar as permissões dos três perfis.
 2. Manter o catálogo oficial dos equipamentos, incluindo endereço, coordenadas, capacidade, limite operacional e raio de cobertura. O Java gera o `id` estável que as outras partes usam.
 3. Resolver a cobertura em `GET /coverage?latitude=…&longitude=…` e vincular o equipamento ao protocolo. Manter criação, edição, exclusão, fotos, complementos, avaliação técnica e atendimento dos relatos.
-4. Fornecer ao .NET a leitura do catálogo ativo. Se a API Java já tiver `GET /sensors` e `GET /sensors/{id}`, reaproveite essas rotas entre os serviços. Preserve o contrato das demais rotas já implementadas.
+4. Fornecer ao .NET o catálogo ativo via `GET /sensors` e `GET /sensors/{id}` e gerar a análise em `POST /sensors/{id}/insights`.
 
 ### .NET — monitoramento e telemetria
 
-1. Implementar `GET /sensors` para o mapa da operadora e `GET /sensors/{id}` para a ficha, unindo o cadastro lido do Java ao histórico no Oracle pelo `id` do equipamento.
-2. Testar com leituras fictícias gravadas no Oracle. Para equipamentos sem leituras, retornar `offline`, com `volume` e `lastReadingAt` nulos e listas de histórico vazias.
-3. Na etapa seguinte, receber as leituras do **Wokwi via HiveMQ**, associar o dispositivo ao equipamento cadastrado, evitar duplicatas por dispositivo e `sampleId`, gravar as medições e calcular os estados e eventos de alarme.
-4. Disponibilizar os dados necessários para os indicadores e a análise, conforme o contrato entre as equipes. A funcionalidade com Spring AI permanece no Java para atender ao enunciado de Java Advanced.
+1. Fornecer `GET /sensors` para o mapa da operadora e `GET /sensors/{id}` para a ficha, unindo o cadastro lido do Java à telemetria pelo `id` do equipamento.
+2. Guardar as medições e os eventos. O perfil de desenvolvimento usa SQLite. Em Oracle, prepare o esquema com o script do repositório .NET. Um equipamento sem leituras aparece como `offline`.
+3. Receber medições de teste por `POST /sensors/{id}/readings`, usando o JWT da operadora e o prefixo como `deviceId`. O backend deduplica por dispositivo e `sampleId`.
+4. Conectar **Wokwi e HiveMQ** à ingestão e disponibilizar a telemetria para a análise do Java nas próximas etapas.
 
 ### Integração entre as equipes
 
-- **Um login.** O mobile autentica no Java e envia o mesmo token Bearer nas duas APIs. Alinhem com o responsável pelo Java como o .NET validará o token e o papel `operator` antes de liberar o monitoramento. O contrato detalha o caminho para JWT e para token opaco.
-- **Um catálogo.** O .NET lê os equipamentos ativos do Java. No Oracle, o Java grava contas, catálogo e relatos. O .NET grava leituras e eventos vinculados ao ID do Java. Quando um equipamento é retirado, sai do mapa e da cobertura, e o histórico permanece.
+- **Um login.** O mobile autentica no Java e envia o mesmo token Bearer nas duas APIs. O .NET valida a assinatura HS256 com o segredo compartilhado entre os servidores, o emissor `saneia-api`, a expiração e o papel de operadora. O Expo recebe apenas as URLs públicas.
+- **Um catálogo.** O .NET encaminha o Bearer da operadora ao Java para consultar os equipamentos ativos. O Java grava contas, catálogo e relatos. O .NET grava leituras e eventos vinculados ao ID do Java. Quando um equipamento é retirado, sai do mapa e da cobertura, e o histórico permanece.
 - **Dois fluxos independentes.** Cadastro, cobertura e atendimento continuam disponíveis quando a telemetria estiver indisponível. Um alarme do equipamento gera um evento no .NET. O status do protocolo é atualizado pela operadora no Java.
 
-O [contrato das APIs](docs/api.md) detalha rotas, campos e erros. A integração atual usa o [backend Java do Saneia](https://github.com/2TDSPO-JPG/API-Java-Global-Solutions) como referência.
+O [contrato das APIs](docs/api.md) detalha rotas, campos e erros. O código dos serviços está nos repositórios [Java](https://github.com/2TDSPO-JPG/API-Java-Global-Solutions) e [.NET](https://github.com/2TDSPO-JPG/API-DotNet-Global-Solutions).
 
 ## Endpoints e forma de acesso
 
-As rotas abaixo são relativas ao prefixo `/api` de cada serviço. No desenvolvimento, a base do Java é `http://localhost:8080/api`. A URL e a porta do .NET serão fornecidas pelo responsável por essa API. No app, a URL do Java vem de `EXPO_PUBLIC_API_URL`. A configuração de uma segunda base para o .NET é uma etapa pendente do cliente.
+As rotas abaixo são relativas à base de cada serviço. No desenvolvimento, `EXPO_PUBLIC_API_URL` aponta para `http://localhost:8080/api` e `EXPO_PUBLIC_MONITORING_API_URL` para `http://localhost:5085/api`. Se a variável do monitoramento estiver vazia, o app consulta mapa e ficha pelo Java.
 
 O mobile faz login no Java e usa o `token` retornado no cabeçalho `Authorization: Bearer <token>` das chamadas protegidas. As duas APIs devem aceitar a mesma sessão, com validação de expiração e papel no servidor. Para JSON, o app envia `Content-Type: application/json`. Para fotos, envia multipart com a parte textual `report` e o arquivo `photo`.
 
@@ -77,7 +77,7 @@ Os papéis retornados em `user.role` são `resident`, `operator` e `admin`. O ap
 | `GET /sensors` | Operadora | Mapa, filtros, totais por estado e endereços dos equipamentos vinculados aos relatos |
 | `GET /sensors/{id}` | Operadora | Ficha completa, leituras do gráfico e eventos do equipamento |
 
-Essas consultas usarão o Bearer obtido no Java. O app consulta o mapa e a ficha a cada cinco segundos enquanto a tela estiver em foco. As listas são arrays JSON. Os IDs devem coincidir com os IDs do catálogo Java. O .NET deve retornar o mesmo formato `Sensor` descrito no [contrato](docs/api.md), incluindo endereço, coordenadas, estado, volume, capacidade, limite e histórico.
+Essas consultas usam o Bearer obtido no Java. O app consulta o mapa e a ficha a cada cinco segundos enquanto a tela estiver em foco. A lista retorna um array JSON paginado e a ficha inclui até 500 medições e 100 eventos recentes. O .NET usa os IDs do catálogo Java e retorna o formato `Sensor` descrito no [contrato](docs/api.md).
 
 O endereço completo fica em `address`, o bairro em `neighborhood` e os campos separados ficam em `postalAddress`, quando disponíveis. Os estados são `normal`, `warning`, `alarm` e `offline`. Um equipamento sem leitura tem `status: "offline"`, `volume: null`, `lastReadingAt: null` e listas de histórico vazias.
 
@@ -93,17 +93,15 @@ Content-Type: application/json
 }
 ```
 
-Com o token dessa resposta, a chamada de monitoramento seguirá este formato quando a segunda API estiver integrada. A base `https://api-dotnet.exemplo/api` ilustra o endereço a ser substituído pela URL real.
+Com o token dessa resposta, consulte o monitoramento na base .NET. O exemplo usa o ID `21` do catálogo Java.
 
 ```http
-GET https://api-dotnet.exemplo/api/sensors/21
+GET http://localhost:5085/api/sensors/21
 Accept: application/json
 Authorization: Bearer <token retornado pelo Java>
 ```
 
 As duas APIs devem permitir a origem do Expo no CORS, os métodos utilizados, os cabeçalhos `Authorization` e `Content-Type` e o preflight `OPTIONS`. Listas paginadas usam `page` e `size`, retornam arrays e expõem `X-Total-Pages` no CORS para o cliente percorrer todas as páginas. Erros seguem `{ "message": "..." }`, com `401` para sessão inválida ou expirada e `403` para falta de permissão.
-
-**Situação atual do acesso.** O login, os cadastros e os relatos já usam o Java. O mapa e a ficha também leem o catálogo do Java provisoriamente. Ao receber a base do .NET, o cliente deverá encaminhar os dois GETs de monitoramento para ela. O endpoint de insights permanece no Java.
 
 ## Regras que o Java precisa aplicar
 
@@ -115,28 +113,20 @@ As duas APIs devem permitir a origem do Expo no CORS, os métodos utilizados, os
 
 As listas são retornadas como arrays JSON. Os erros usam `{ "message": "..." }` e as exclusões bem-sucedidas respondem com `204` sem corpo.
 
-## Ordem para integrar e testar
+## Executar com Java e .NET
 
-1. **Java.** Entrar com os três perfis, cadastrar um equipamento como administrador e abrir um relato dentro da cobertura como morador. Como operadora, consultar e atualizar o protocolo.
-2. **.NET.** Com a mesma sessão de operadora, verificar se o equipamento cadastrado no Java aparece no mapa e se a ficha exibe as leituras de teste. Na aba **Relatos por bairro**, verificar o endereço do equipamento pelo `sensorId` do relato.
-3. **IoT e IA.** Depois de validar as duas APIs por HTTP, publicar uma leitura no HiveMQ e verificar o histórico no app. A análise usa o endpoint Java com Spring AI. Com o Gemini configurado no backend, a resposta indica `aiGenerated: true`.
+1. No repositório Java, rode `.\mvnw.cmd spring-boot:run` no Windows. O perfil `local` usa H2 em memória e provisiona as três contas de teste abaixo. A API atende em `http://localhost:8080/api`, com Swagger em `/api/swagger-ui.html`.
+2. No repositório .NET, use o SDK .NET 8. Configure `Java__BaseUrl=http://localhost:8080/api` e `Jwt__SharedSecret` com o mesmo valor de `JWT_SECRET` do Java. Se o Java estiver usando a configuração padrão do perfil local, consulte o segredo de desenvolvimento nesse perfil. Rode `dotnet run --project src/Saneia.Api`. O perfil Development usa SQLite e atende em `http://localhost:5085/api`, com Swagger em `/swagger`. Se usar Expo Web na porta 8082, configure `Cors__Origins__0=http://localhost:8082` no .NET ou informe a origem exata usada pelo navegador.
+3. No mobile, use Node.js 22.13 ou superior, execute `npm ci` e crie `.env.local` a partir do [.env.example](.env.example). Configure as duas URLs e rode `npx expo start --port 8082`. Pressione **w** para o navegador. Para testar no Expo Go, use nas duas URLs o IP do computador e configure os servidores para ouvir nesse endereço. No .NET, use `dotnet run --project src/Saneia.Api -- --urls http://0.0.0.0:5085`. Reinicie o Expo após editar as variáveis.
+4. Entre como administrador e cadastre um equipamento com CEP. Entre como operadora e abra o mapa. Use o Swagger .NET ou o arquivo `requests.http` daquele repositório para gravar uma medição de teste com o JWT da operadora. Confira a leitura no mapa e na ficha. Em **Relatos por bairro**, o app cruza o `sensorId` do relato com o catálogo do monitoramento.
 
-### Testar o Java com o app
+O cliente envia `postalAddress` ao Java no cadastro e na edição e usa o mesmo objeto ao reabrir o formulário. Equipamentos legados podem preservar o endereço livre. O endereço formatado aceita até 200 caracteres, o número até 10 e o complemento até 80. Para exigir o objeto nos novos cadastros, configure `SANEIA_REQUIRE_POSTAL_ADDRESS=true` no Java.
 
-1. No repositório Java, rode `.\mvnw.cmd spring-boot:run` no Windows. O perfil `local` usa H2 em memória e provisiona as três contas de teste abaixo. A API inicia por padrão em `http://localhost:8080/api`, com Swagger em `/api/swagger-ui.html`.
-2. No mobile, use Node.js 22.13 ou superior e execute `npm ci`. Crie `.env.local` a partir do [.env.example](.env.example) e configure `EXPO_PUBLIC_API_URL=http://localhost:8080/api`. Para testar no celular, troque `localhost` pelo IP do computador na rede local. Na nuvem, use a URL HTTPS real da API com o sufixo `/api`.
-3. Rode `npx expo start`, pressione **w** e entre com uma conta da API. Reinicie o Expo após alterar a URL. Se restringir o CORS do Java, inclua a origem do Expo e exponha o cabeçalho `X-Total-Pages`.
-
-O [cliente HTTP](src/services/api.js) usa o JWT do Java, percorre as páginas das listas e envia fotos de relatos e complementos via multipart. O app lê `GET /sensors` e `GET /sensors/{id}` do Java provisoriamente para manter o catálogo, os endereços e a ficha acessíveis. O botão **Gerar análise com IA** consome `POST /sensors/{id}/insights` do Java e usa os dados do período escolhido. A segunda base HTTP e a ingestão IoT ficam para a etapa .NET. `EXPO_PUBLIC_IOT_URL` é uma configuração opcional do ambiente local.
-
-### Ajustes pendentes no backend
-
-- **Endereço estruturado do equipamento.** O Java atual aceita e devolve `address`, `neighborhood` e `coordinate`. Para reabrir o formulário com CEP, número, cidade e UF preenchidos, adicione `postalAddress` às entradas de `POST /admin/sensors` e `PATCH /admin/sensors/{id}`, salve o objeto e devolva-o nas consultas do catálogo. Enquanto isso, o app envia o endereço completo formatado, limitado aos 200 caracteres do DTO Java.
-- **Login compartilhado com o .NET.** Antes da segunda API, alinhe a validação do JWT. O Java atual usa HS256. A opção descrita no contrato é um endpoint interno de validação no Java. Esse ajuste pertence à etapa .NET.
+O botão **Gerar análise com IA** chama o Java com o período escolhido. O gráfico usa as leituras do .NET quando configurado. O Java calcula a análise com as leituras disponíveis em seu próprio banco até que receba a telemetria do .NET. A ingestão de leituras de teste é HTTP. A ligação com Wokwi/HiveMQ fica para a etapa de IoT.
 
 ## Consultar o fluxo local
 
-Para a avaliação de persistência local da disciplina Mobile, defina `EXPO_PUBLIC_LOCAL_MODE=true` e deixe `EXPO_PUBLIC_API_URL` e `EXPO_PUBLIC_IOT_URL` vazias. O acesso é feito por e-mail e senha. Uma instalação nova começa com listas vazias, e os registros existentes no aparelho são preservados. No fluxo principal, configure a URL do Java e mantenha `EXPO_PUBLIC_LOCAL_MODE=false`.
+Para a avaliação de persistência local da disciplina Mobile, defina `EXPO_PUBLIC_LOCAL_MODE=true` e deixe `EXPO_PUBLIC_API_URL`, `EXPO_PUBLIC_MONITORING_API_URL` e `EXPO_PUBLIC_IOT_URL` vazias. O acesso é feito por e-mail e senha. Uma instalação nova começa com listas vazias, e os registros existentes no aparelho são preservados. No fluxo conectado, configure as URLs das APIs e mantenha `EXPO_PUBLIC_LOCAL_MODE=false`.
 
 As contas abaixo pertencem ao ambiente de desenvolvimento e também são provisionadas pelo perfil `local` do Java. No ambiente publicado, use as contas provisionadas pelo responsável pelo backend.
 
