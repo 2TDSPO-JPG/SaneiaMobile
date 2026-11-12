@@ -42,15 +42,18 @@ export default function MonitorMap({ center, markers = [], selection, onSelect }
     layers.clearLayers();
     for (const marker of markers) {
       const label = document.createElement('div');
-      label.className = 'saneia-map-label';
-      label.textContent = marker.prefix || marker.id;
-      if (['alarm', 'warning', 'offline'].includes(marker.status)) {
+      label.className = marker.compact ? `saneia-map-dot ${marker.status}` : 'saneia-map-label';
+      label.textContent = marker.compact
+        ? { alarm: '!', warning: '!', offline: '?' }[marker.status] ?? ''
+        : marker.prefix || marker.id;
+      if (!marker.compact && ['alarm', 'warning', 'offline'].includes(marker.status)) {
         const indicator = document.createElement('span');
         indicator.className = `saneia-map-signal ${marker.status}`;
         indicator.textContent = marker.status === 'offline' ? '?' : '!';
         label.appendChild(indicator);
       }
-      const icon = L.divIcon({ html: label, className: 'saneia-map-marker', iconSize: [100, 30], iconAnchor: [50, 15] });
+      const icon = L.divIcon({ html: label, className: 'saneia-map-marker',
+        iconSize: marker.compact ? [14, 14] : [100, 30], iconAnchor: marker.compact ? [7, 7] : [50, 15] });
       const point = L.marker([marker.coordinate.latitude, marker.coordinate.longitude], {
         icon, title: marker.title, keyboard: true,
       }).addTo(layers).on('click', () => marker.onPress?.());

@@ -1,4 +1,8 @@
 .saneia-map-marker { background: transparent; border: 0; }
+.saneia-map-dot { display: grid; place-items: center; box-sizing: border-box; width: 14px; height: 14px; border: 1px solid white; border-radius: 50%; background: #17694f; color: white; font: 900 9px/1 system-ui, sans-serif; }
+.saneia-map-dot.alarm { background: #b34438; }
+.saneia-map-dot.warning { background: #ffd65b; color: #192e2b; }
+.saneia-map-dot.offline { background: #82938b; }
 .saneia-map-label {
   display: flex; align-items: center; justify-content: center; gap: 7px;
   box-sizing: border-box; height: 30px; padding: 0 10px;

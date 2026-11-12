@@ -8,7 +8,7 @@ O fluxo principal usa autenticação na API Java. A página de acesso tem login 
 
 A visão geral mostra os totais retornados pela API, os equipamentos que precisam de atenção e os últimos relatos. O cadastro administrativo usa CEP para preencher endereço e localização. As coordenadas podem ser ajustadas, e o volume é recebido pelo monitoramento. O mapa web usa Leaflet com base OpenStreetMap e os mapas nativos continuam disponíveis no Android e no iOS. A base cartográfica e a busca de CEP exigem conexão com a internet.
 
-Para usar a API local com um catálogo vazio, configure `SEED_DEMO_DATA=false` no processo Java antes de iniciá-lo. Essa configuração mantém as contas provisionadas e permite cadastrar os equipamentos e relatos pelo aplicativo.
+O ambiente local inclui 199 equipamentos simulados em São Paulo e o `RES-07` reservado ao Wokwi. O mapa permite combinar status e busca por prefixo, bairro, rua ou CEP. Para iniciar com catálogo vazio, use `SEED_SP_CATALOG=false` e `SEED_DEMO_DATA=false` em um banco novo.
 
 ## Quem implementa o quê
 
@@ -41,7 +41,7 @@ O [contrato das APIs](docs/api.md) detalha rotas, campos e erros. O código dos 
 
 ## Endpoints e forma de acesso
 
-As rotas abaixo são relativas à base de cada serviço. No desenvolvimento, `EXPO_PUBLIC_API_URL` aponta para `http://localhost:8080/api` e `EXPO_PUBLIC_MONITORING_API_URL` para `http://localhost:5085/api`. Se a variável do monitoramento estiver vazia, o app consulta mapa e ficha pelo Java.
+As rotas abaixo são relativas à base de cada serviço. No desenvolvimento, `EXPO_PUBLIC_API_URL` aponta para `http://localhost:8080/api` e `EXPO_PUBLIC_MONITORING_API_URL` para `http://localhost:8082/__saneia_monitoring`. O Expo encaminha as consultas de monitoramento ao .NET definido em `SANEIA_MONITORING_UPSTREAM`. Para uma API .NET hospedada, use a URL HTTPS dela no app. Se a variável do monitoramento estiver vazia, o app consulta mapa e ficha pelo Java.
 
 O mobile faz login no Java e usa o `token` retornado no cabeçalho `Authorization: Bearer <token>` das chamadas protegidas. As duas APIs devem aceitar a mesma sessão, com validação de expiração e papel no servidor. Para JSON, o app envia `Content-Type: application/json`. Para fotos, envia multipart com a parte textual `report` e o arquivo `photo`.
 
@@ -117,7 +117,7 @@ As listas são retornadas como arrays JSON. Os erros usam `{ "message": "..." }`
 
 1. No repositório Java, rode `.\mvnw.cmd spring-boot:run` no Windows. O perfil `local` usa H2 em memória e provisiona as três contas de teste abaixo. A API atende em `http://localhost:8080/api`, com Swagger em `/api/swagger-ui.html`.
 2. No repositório .NET, use o SDK .NET 8. Configure `Java__BaseUrl=http://localhost:8080/api` e `Jwt__SharedSecret` com o mesmo valor de `JWT_SECRET` do Java. Se o Java estiver usando a configuração padrão do perfil local, consulte o segredo de desenvolvimento nesse perfil. Rode `dotnet run --project src/Saneia.Api`. O perfil Development usa SQLite e atende em `http://localhost:5085/api`, com Swagger em `/swagger`. Se usar Expo Web na porta 8082, configure `Cors__Origins__0=http://localhost:8082` no .NET ou informe a origem exata usada pelo navegador.
-3. No mobile, use Node.js 22.13 ou superior, execute `npm ci` e crie `.env.local` a partir do [.env.example](.env.example). Configure as duas URLs e rode `npx expo start --port 8082`. Pressione **w** para o navegador. Para testar no Expo Go, use nas duas URLs o IP do computador e configure os servidores para ouvir nesse endereço. No .NET, use `dotnet run --project src/Saneia.Api -- --urls http://0.0.0.0:5085`. Reinicie o Expo após editar as variáveis.
+3. No mobile, use Node.js 22.13 ou superior, execute `npm ci` e crie `.env.local` a partir do [.env.example](.env.example). Rode `npx expo start --port 8082`. Pressione **w** para o navegador. Para testar no Expo Go, use o IP do computador nas duas variáveis `EXPO_PUBLIC_*` de API. O endereço de `SANEIA_MONITORING_UPSTREAM` é visto pelo computador que roda o Expo, então pode apontar para `127.0.0.1:5085`. Reinicie o Expo após editar as variáveis.
 4. Entre como administrador e cadastre um equipamento com CEP. Entre como operadora e abra o mapa. Use o Swagger .NET ou o arquivo `requests.http` daquele repositório para gravar uma medição de teste com o JWT da operadora. Confira a leitura no mapa e na ficha. Em **Relatos por bairro**, o app cruza o `sensorId` do relato com o catálogo do monitoramento.
 
 O cliente envia `postalAddress` ao Java no cadastro e na edição e usa o mesmo objeto ao reabrir o formulário. Equipamentos legados podem preservar o endereço livre. O endereço formatado aceita até 200 caracteres, o número até 10 e o complemento até 80. Para exigir o objeto nos novos cadastros, configure `SANEIA_REQUIRE_POSTAL_ADDRESS=true` no Java.
@@ -125,7 +125,7 @@ O cliente envia `postalAddress` ao Java no cadastro e na edição e usa o mesmo 
 ### Testar Wokwi e análise com o mesmo histórico
 
 1. Nos dois backends, defina a mesma `SANEIA_INTEGRATION_KEY` de pelo menos 32 bytes. Defina `DOTNET_TELEMETRY_URL=http://localhost:5085/api` no Java e `Mqtt__Enabled=true` no .NET. Use o mesmo JWT entre os backends, conforme o procedimento acima.
-2. No app, cadastre como administrador o equipamento `RES-07` com capacidade de 2.000 L e limite de 1.800 L. O .NET usa esse prefixo para associar as leituras do sketch Wokwi `S07` ao ID cadastrado.
+2. O catálogo local já inclui o equipamento `RES-07` com capacidade de 2.000 L e limite de 1.800 L. O .NET usa esse prefixo para associar as leituras do sketch Wokwi `S07` ao ID cadastrado.
 3. Inicie o Wokwi com os [arquivos do circuito](https://github.com/2TDSPO-JPG/API-DotNet-Global-Solutions/tree/main/wokwi) e, como operadora, abra a ficha. A distância de 17 cm gera aproximadamente 1.850 L e deve abrir um alarme. O app consulta o .NET a cada cinco segundos. O broker público da configuração de demonstração recebe somente leituras fictícias.
 4. Toque em **Gerar análise com IA**. O Java consulta o mesmo histórico no .NET, e o app indica **Histórico da API .NET**. Com `GEMINI_API_KEY` configurada no Java, confira `aiGenerated: true` na resposta.
 

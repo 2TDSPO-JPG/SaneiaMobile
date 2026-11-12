@@ -49,8 +49,12 @@ async function request(path, { token, method = 'GET', body, apiUrl = baseUrl, pa
     if (data === null) throw new Error('A API retornou uma resposta inválida.');
     return paged ? { data, totalPages: Number(response.headers.get('X-Total-Pages')) } : data;
   } catch (error) {
-    if (error.name === 'AbortError') throw new Error('A conexão demorou demais. Tente novamente.');
-    if (error instanceof TypeError) throw new Error('Não foi possível conectar à API. Verifique a rede e tente novamente.');
+    if (error.name === 'AbortError' || /(?:timed out|timeout)/i.test(error.message ?? '')) {
+      throw new Error('A conexão demorou demais. Tente novamente.');
+    }
+    if (error instanceof TypeError || /^(?:fetch failed|network request failed)/i.test(error.message ?? '')) {
+      throw new Error('Não foi possível conectar à API. Verifique a rede e tente novamente.');
+    }
     throw error;
   } finally {
     clearTimeout(timeout);
