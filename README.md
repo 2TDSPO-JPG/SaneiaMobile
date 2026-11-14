@@ -131,6 +131,16 @@ O cliente envia `postalAddress` ao Java no cadastro e na edição e usa o mesmo 
 
 Os detalhes de broker, credenciais e calibração ficam no [README do .NET](https://github.com/2TDSPO-JPG/API-DotNet-Global-Solutions#saneia--api-net-de-monitoramento).
 
+## Build Android para avaliação
+
+Use este fluxo se a entrega exigir Firebase App Distribution. Após fazer o merge, trabalhe com o checkout limpo e vincule o repositório ao projeto Expo da equipe. Configure no ambiente EAS `preview` as URLs HTTPS públicas `EXPO_PUBLIC_API_URL` e `EXPO_PUBLIC_MONITORING_API_URL`, com `/api` nas duas. Configure `SANEIA_ANDROID_MAPS_KEY` com uma chave do Maps SDK for Android restrita ao pacote `br.com.saneia.mobile` e ao SHA-1 da assinatura do APK. Mantenha `EXPO_PUBLIC_LOCAL_MODE=false`. O perfil valida esses valores e copia o hash do código para a tela **Sobre o aplicativo**.
+
+```powershell
+npx eas-cli build --platform android --profile avaliacao
+```
+
+Depois de instalar o APK, confira se o hash da tela Sobre corresponde ao código entregue. Teste o login, o CRUD e o mapa em uma rede diferente. Use o console do Firebase App Distribution para enviar esse mesmo APK e cadastrar o professor como tester. Acrescente o link do vídeo neste README e no `.txt` de identificação. [Build interno do Expo](https://docs.expo.dev/tutorial/eas/internal-distribution-builds/) · [Distribuição de APK no Firebase](https://firebase.google.com/docs/app-distribution/android/distribute-console)
+
 ## Consultar o fluxo local
 
 Para a avaliação de persistência local da disciplina Mobile, defina `EXPO_PUBLIC_LOCAL_MODE=true` e deixe `EXPO_PUBLIC_API_URL`, `EXPO_PUBLIC_MONITORING_API_URL` e `EXPO_PUBLIC_IOT_URL` vazias. O acesso é feito por e-mail e senha. Uma instalação nova começa com listas vazias, e os registros existentes no aparelho são preservados. No fluxo conectado, configure as URLs das APIs e mantenha `EXPO_PUBLIC_LOCAL_MODE=false`.

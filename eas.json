@@ -1,0 +1,10 @@
+{
+  "cli": { "requireCommit": true },
+  "build": {
+    "avaliacao": {
+      "distribution": "internal",
+      "environment": "preview",
+      "android": { "buildType": "apk" }
+    }
+  }
+}
