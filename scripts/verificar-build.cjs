@@ -23,8 +23,5 @@ if (process.env.EAS_BUILD_PROFILE === 'avaliacao') {
   if (!/^[a-f0-9]{40}$/i.test(process.env.EAS_BUILD_GIT_COMMIT_HASH ?? process.env.SANEIA_COMMIT_HASH ?? '')) {
     throw new Error('Informe o hash Git completo do código que será avaliado.');
   }
-  if (process.env.EAS_BUILD_PLATFORM === 'android' && !process.env.SANEIA_ANDROID_MAPS_KEY?.trim()) {
-    throw new Error('Configure SANEIA_ANDROID_MAPS_KEY para o mapa do APK instalado.');
-  }
   console.log('Configuração do build de avaliação validada.');
 }

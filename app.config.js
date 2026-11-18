@@ -11,7 +11,6 @@ function commitHash() {
   }
 }
 
-const mapsKey = process.env.SANEIA_ANDROID_MAPS_KEY?.trim();
 
 module.exports = {
   name: 'Saneia',
@@ -25,9 +24,8 @@ module.exports = {
   android: { package: 'br.com.saneia.mobile' },
   plugins: [
     'expo-router',
-    ...(mapsKey ? [['react-native-maps', { androidGoogleMapsApiKey: mapsKey }]] : []),
     ['expo-image-picker', { photosPermission: 'Permitir anexar uma foto ao relato de saneamento.', microphonePermission: false }],
     ['expo-location', { locationWhenInUsePermission: 'Permitir sugerir a localização do problema relatado.' }],
   ],
-  extra: { commitHash: commitHash() },
+  extra: { commitHash: commitHash(), eas: { projectId: 'daf03f11-772d-46a2-b1a3-6b533da99ae6' } },
 };

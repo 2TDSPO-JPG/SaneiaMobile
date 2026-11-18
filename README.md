@@ -6,7 +6,7 @@ O Saneia recebe relatos de saneamento dos moradores, organiza o atendimento da o
 
 O fluxo principal usa autenticação na API Java. A página de acesso tem login e cadastro de morador. Cada perfil recebe sua própria navegação, com menu lateral em telas maiores e navegação inferior no celular.
 
-A visão geral mostra os totais retornados pela API, os equipamentos que precisam de atenção e os últimos relatos. O cadastro administrativo usa CEP para preencher endereço e localização. As coordenadas podem ser ajustadas, e o volume é recebido pelo monitoramento. O mapa web usa Leaflet com base OpenStreetMap e os mapas nativos continuam disponíveis no Android e no iOS. A base cartográfica e a busca de CEP exigem conexão com a internet.
+A visão geral mostra os totais retornados pela API, os equipamentos que precisam de atenção e os últimos relatos. O cadastro administrativo usa CEP para preencher endereço e localização. As coordenadas podem ser ajustadas, e o volume é recebido pelo monitoramento. Na web e no Android, o mapa usa Leaflet e OpenStreetMap. No Android, o componente DOM do Expo incorpora a mesma visualização ao app instalado. O iOS usa o mapa nativo. A base cartográfica e a busca de CEP exigem conexão com a internet.
 
 O ambiente local inclui 199 equipamentos simulados em São Paulo e o `RES-07` reservado ao Wokwi. O mapa permite combinar status e busca por prefixo, bairro, rua ou CEP. Para iniciar com catálogo vazio, use `SEED_SP_CATALOG=false` e `SEED_DEMO_DATA=false` em um banco novo.
 
@@ -133,7 +133,7 @@ Os detalhes de broker, credenciais e calibração ficam no [README do .NET](http
 
 ## Build Android para avaliação
 
-Use este fluxo se a entrega exigir Firebase App Distribution. Após fazer o merge, trabalhe com o checkout limpo e vincule o repositório ao projeto Expo da equipe. Configure no ambiente EAS `preview` as URLs HTTPS públicas `EXPO_PUBLIC_API_URL` e `EXPO_PUBLIC_MONITORING_API_URL`, com `/api` nas duas. Configure `SANEIA_ANDROID_MAPS_KEY` com uma chave do Maps SDK for Android restrita ao pacote `br.com.saneia.mobile` e ao SHA-1 da assinatura do APK. Mantenha `EXPO_PUBLIC_LOCAL_MODE=false`. O perfil valida esses valores e copia o hash do código para a tela **Sobre o aplicativo**.
+A avaliação pede um APK distribuído pelo Firebase App Distribution. Use o checkout limpo do commit a ser entregue. O app já está vinculado ao projeto Expo da equipe. Configure no ambiente EAS `preview` as URLs HTTPS públicas `EXPO_PUBLIC_API_URL` e `EXPO_PUBLIC_MONITORING_API_URL`, com `/api` nas duas. O mapa Android usa as camadas públicas do OpenStreetMap e precisa de conexão à internet. Mantenha `EXPO_PUBLIC_LOCAL_MODE=false`. O perfil valida esses valores e copia o hash do código para a tela **Sobre o aplicativo**.
 
 ```powershell
 npx eas-cli build --platform android --profile avaliacao
