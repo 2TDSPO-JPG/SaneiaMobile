@@ -2,6 +2,11 @@
 
 O Saneia recebe relatos de saneamento dos moradores, organiza o atendimento da operadora e permite que a administração gerencie o catálogo de equipamentos. O app usa React Native, Expo SDK 58 e Expo Router, com AsyncStorage no modo local. O fluxo conectado usa **Java (Spring Boot)** para atendimento e cadastro e **.NET (ASP.NET Core)** para monitoramento.
 
+
+### Erro de conexão com a API
+
+Se as APIs já estiverem publicadas, configure as URLs HTTPS completas do Java e do monitoramento no arquivo .env.local, incluindo o caminho /api de cada serviço. Um IP antigo da rede local deixa de funcionar quando o computador muda de endereço ou os servidores locais estão parados. Mantenha EXPO_PUBLIC_LOCAL_MODE=false, reinicie o Expo e recarregue o aplicativo após editar as URLs. O arquivo .env.local é configuração da máquina e não deve ser commitado. No Expo Web, a API também precisa autorizar a origem local em CORS; para acessar os serviços publicados pelo navegador, use preferencialmente o site publicado na mesma origem.
+
 ## Interface e acesso
 
 O fluxo principal usa autenticação na API Java. A página de acesso tem login e cadastro de morador. Cada perfil recebe sua própria navegação, com menu lateral em telas maiores e navegação inferior no celular.
